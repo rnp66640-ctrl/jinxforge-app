@@ -30,6 +30,15 @@
      0.85. C) hand-tracking path beside the controllers: quick pinch = trigger, pinch-hold on
      a part = grab (both hands = scale), open left palm = panel. Switches: TABLE_ADJUST,
      HANDS. Controllers stay primary until hands pass a stand.
+     WORKSHOP v1 (Janx, owner's stand of 2026-10-31 11:24 ET, "the tools are a go"):
+     1) the wrist panel is gone; a fixed WALL PANEL hangs on a wall 1.2 m to your left (point and
+     pull, or poke it). 2) MIRROR is OFF by default, and a save from before this version comes
+     back with it off too. 3) resizing made easy: hold a part and push the stick up/down to grow
+     or shrink it; and the second hand now scales from anywhere (it no longer has to point at
+     the same part). 4) THE TOOL BENCH on your right: stock pieces, chisel (cut), pin (solo),
+     hammer (delete) on painted outlines; drop or toss a tool and it goes home; RECALL brings
+     the last one back to your hand. The dummy moved back 35 cm to clear the wall panel.
+     Switch: WORKSHOP = false removes the bench.
      Version 2 header follows.
      Rebuilt on Room Zero v2 (repo 052d47f, Jinx): same room, same metres, same three.js pin,
      Room Zero v2's laws carried: no voice anywhere (owner ruling 2026-10-30; sound law updated 2026-10-31 — UI sound effects IN per the header above, speech still OUT),
@@ -68,16 +77,16 @@
 <div id="app"></div>
 <div id="hud">
   <h1>THE FORGE ROOM</h1>
-  <p>VR: <b>trigger</b> = tool (place / cut / solo / delete) &middot; <b>grip</b> = grab, both grips = scale &middot;
-     <b>stick left/right</b> = next tool, <b>up/down</b> = snap 1/5/10 mm &middot; <b>A/X</b> undo, <b>B/Y</b> redo &middot;
-     <b>turn your left palm to your face</b> = wrist panel (left stick click pins it; hold the click 1 s to teach it your pose) &middot;
-     <b>amber handle</b> on the table front = pull the table up or down &middot; <b>hands</b>: quick pinch = trigger, pinch and hold on a part = grab, open left palm = panel. Every answer shows as text. Desktop: buttons below, drag parts with the mouse, shift + wheel scales.</p>
+  <p>VR: <b>tool bench</b> on your right: pick a tool up (grip), use it (tip on a part + trigger), let go and it goes home &middot;
+     <b>wall panel</b> on your left: point + trigger, or poke it &middot; <b>grip</b> = grab a part; while holding, <b>stick up/down</b> = bigger / smaller, or grip with the other hand anywhere = two-hand scale &middot;
+     <b>stick click</b> = RECALL the last tool &middot; <b>A/X</b> undo, <b>B/Y</b> redo &middot; empty-hand trigger = place / cut / solo / delete (stick left/right picks, up/down = snap 1/5/10 mm) &middot;
+     <b>amber handle</b> on the table front = pull the table up or down &middot; <b>hands</b>: pinch and hold = pick up, quick pinch = trigger, hold a tool's tip on a part 0.4 s = use it. Every answer shows as text. Desktop: buttons below, drag parts with the mouse, shift + wheel scales.</p>
 </div>
 <div id="bar">
   <button data-add="sphere">+ SPHERE</button><button data-add="box">+ BOX</button>
   <button data-add="cylinder">+ CYLINDER</button><button data-add="capsule">+ CAPSULE</button>
   <button data-add="cone">+ CONE</button>
-  <button id="bMirror">MIRROR ON</button><button id="bCut" class="off">CUT MODE OFF</button>
+  <button id="bMirror" class="off">MIRROR OFF</button><button id="bCut" class="off">CUT MODE OFF</button>
   <button id="bUndo">UNDO</button><button id="bRedo">REDO</button>
   <button id="bBed" class="off">BED OFF</button><button id="bRef">DUMMY ON</button>
   <button id="bTdn">TABLE −</button><button id="bTup">TABLE +</button>
@@ -195,7 +204,9 @@ const plane = new THREE.Mesh(new THREE.PlaneGeometry(.26, .24),
   new THREE.MeshBasicMaterial({ color:0xffb000, transparent:true, opacity:.13, side:THREE.DoubleSide, depthWrite:false }));
 plane.rotation.y = Math.PI/2; scene.add(plane);
 /* lay the table furniture at tableY (called on load and whenever the owner moves the table) */
+let benchBuilt = false;   // workshop v1: the tool bench rides the table height too
 function layTable() {
+  if (benchBuilt) layBench();
   tableTop.position.y = tableY - .02;
   for (const l of legs) { l.scale.y = tableY - .04; l.position.y = (tableY - .04) / 2; }
   tableHandle.position.y = tableY - .045;
@@ -234,13 +245,13 @@ function buildDummy() {
   return g;
 }
 const dummy = buildDummy();
-dummy.position.set(-.75, 0, .15); scene.add(dummy);
+dummy.position.set(-.75, 0, -.2); scene.add(dummy);   // workshop v1: back 35 cm, clear of the wall panel
 const dummyTag = (() => {
   const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d');
   g.fillStyle = 'rgba(10,12,14,.8)'; g.fillRect(0, 0, 512, 128); g.fillStyle = '#ffb000';
   g.font = 'bold 60px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('1828.8 mm · 6 ft', 256, 66);
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c) })); s.scale.set(.24, .06, 1);
-  s.position.set(-.75, DUMMY_H/1000 + .08, .15); scene.add(s); return s;
+  s.position.set(-.75, DUMMY_H/1000 + .08, -.2); scene.add(s); return s;
 })();
 function setDummy(on) { dummy.visible = on; dummyTag.visible = on; refreshButtons(); say(on ? 'DUMMY ON: 1828.8 mm, your height.' : 'DUMMY OFF.'); }
 
@@ -294,7 +305,7 @@ function sfx(freq = 440, dur = 0.06, gain = 0.045) {
 
 /* ---------- state ---------- */
 // part: {id, kind, dims:[W,H,D] mm, pos:[x,y,z] mm (y up, from plate centre on the table top), quat:[x,y,z,w], cut, solo}
-let focusId = 0, parts = [], nextId = 1, mirrorOn = true, stepIdx = 1, toolIdx = 0, cutDesk = false, pendingSTL = null;
+let focusId = 0, parts = [], nextId = 1, mirrorOn = false /* owner, 11:24 ET: off by default */, stepIdx = 1, toolIdx = 0, cutDesk = false, pendingSTL = null;
 const undoStack = [], redoStack = [];
 const snapshot = () => JSON.stringify({ parts, nextId });
 let lastState = snapshot();
@@ -303,7 +314,7 @@ function commit() { undoStack.push(lastState); if (undoStack.length > 500) undoS
    refuses storage simply goes without; the room works the same. */
 function autoSave() {
   if (!AUTOSAVE) return;
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v:3, savedAt: Date.now(), state: lastState, mirrorOn, stepIdx })); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v:4, savedAt: Date.now(), state: lastState, mirrorOn, stepIdx })); } catch (e) {}
 }
 function readSave() { try { const o = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return o && o.state ? o : null; } catch (e) { return null; } }
 function restore(s) { const o = JSON.parse(s); parts = o.parts; nextId = o.nextId; lastState = s; pendingSTL = null; rebuildAll(); clearFloaters(); autoSave(); }
@@ -592,9 +603,9 @@ function pinchPoint(c) {
   const a = joint(c, 'thumb-tip'), b = joint(c, 'index-finger-tip'); if (!a || !b) return null;
   return a.getWorldPosition(new THREE.Vector3()).add(b.getWorldPosition(new THREE.Vector3())).multiplyScalar(.5);
 }
-/* C: the part (or twin) whose box is within 1.5 cm of a point */
-function partNear(pt) {
-  let best = null, bd = .015; const bx = new THREE.Box3();
+/* C: the part (or twin) whose box is within 1.5 cm of a point (a tool may reach further) */
+function partNear(pt, reach = .015) {
+  let best = null, bd = reach; const bx = new THREE.Box3();
   for (const [id, v] of views) for (const [obj, twin] of [[v.mesh, false], [v.twin, true]]) {
     if (!obj.visible) continue; bx.setFromObject(obj); const d = bx.distanceToPoint(pt);
     if (d <= bd) { bd = d; best = { p: partById(id), twin }; }
@@ -607,13 +618,19 @@ function handleUnder(c) {
   aim(c); return !!ray.intersectObject(tableHandle, false)[0];
 }
 function grabStart(c, u0) {
+  if (c.userData.tool) return;                       // this hand already has a tool
+  if (!isHand(c) && u0 === undefined) { const t = toolUnder(c); if (t) { grabTool(t, c); return; } }   // the bench first
   if (!held && !tableDrag && handleUnder(c)) {
     tableDrag = { ctrl: c, y0: frameOf(c).getWorldPosition(new THREE.Vector3()).y, t0: tableY };
     tableHandle.material.emissive.setHex(0x884400); tick(c); sfx(520, 0.05); say(`TABLE ${tableY.toFixed(2)} m: pull up or down, let go to set.`); return;
   }
+  /* workshop v1 (owner: "when I tried to resize either it didn't work or I was doing it wrong"):
+     the second hand used to have to point its ray at the same part, which is easy to miss.
+     Now, while one hand holds a part, the other hand's grip (or pinch-hold) anywhere scales it. */
   if (held && held.ctrl !== c) {
-    const u = u0 !== undefined ? u0 : partUnder(c);
-    if (u && u.p === held.p) { twoHand = { d0: dist(), dims0: held.p.dims.slice(), other: c }; tick(c); sfx(560, 0.05); say('Both hands: scaling.'); }
+    if (twoHand) return;
+    twoHand = { d0: Math.max(.02, dist()), dims0: held.p.dims.slice(), other: c }; held.scaled = true;
+    tick(c); sfx(560, 0.05); say('Both hands: scaling. Pull apart = bigger, together = smaller.');
     return;
   }
   const u = u0 !== undefined ? u0 : partUnder(c); if (!u) return;
@@ -622,12 +639,24 @@ function grabStart(c, u0) {
   held = { p: u.p, ctrl: c, twin: u.twin, frame: f, offset: new THREE.Matrix4().copy(f.matrixWorld).invert().multiply(obj.matrixWorld) };
   v.mesh.material.emissive.setHex(0x663311); tick(c); sfx(520, 0.05); say('Holding ' + fmt(u.p));
 }
+/* resize with one hand: hold a part and push the stick up (bigger) or down (smaller), 5 % a step */
+function scaleHeld(sign) {
+  if (!held) return false;
+  const p = held.p, f = sign > 0 ? 1.05 : 1/1.05;
+  p.dims = p.dims.map(d => Math.min(400, Math.max(1, d * f)));
+  if (twoHand) twoHand.dims0 = twoHand.dims0.map(d => Math.min(400, Math.max(1, d * f)));
+  held.scaled = true; drawBar(fmt(p)); statusEl.textContent = fmt(p); lastMsg = fmt(p);
+  return true;
+}
+function finishScale(p) { p.dims = p.dims.map(d => Math.max(STEPS[stepIdx], snapV(d))); }
 function grabEnd(c) {
+  if (c.userData.tool) { releaseTool(c); return; }
   if (tableDrag && tableDrag.ctrl === c) { tableDrag = null; tableHandle.material.emissive.setHex(0x331a00); setTable(tableY); tick(c, .3); sfx(300, 0.05); return; }
-  if (twoHand && twoHand.other === c) { const p = held.p; twoHand = null; setDims(p.id, p.dims); tick(c); say(fmt(p)); return; }
+  if (twoHand && twoHand.other === c) { const p = held.p; twoHand = null; finishScale(p); applyPose(p); tick(c); say(fmt(p) + ' (still holding)'); return; }
   if (!held || held.ctrl !== c) return;
-  const p = held.p; views.get(p.id).mesh.material.emissive.setHex(0); twoHand = null; held = null;
-  setPose(p.id, p.pos, p.quat); tick(c, .3); say('Set: ' + fmt(p));
+  const p = held.p, scaled = held.scaled; views.get(p.id).mesh.material.emissive.setHex(0); twoHand = null; held = null;
+  if (scaled) finishScale(p);
+  setPose(p.id, p.pos, p.quat); if (scaled) refreshView(p); tick(c, .3); say('Set: ' + fmt(p));
 }
 function followTable() {
   if (!tableDrag) return;
@@ -647,7 +676,8 @@ function followHeld() {
   applyPose(p);
 }
 function trigger(c) {
-  if (panel.visible && panelPress(c)) return;
+  if (c.userData.tool) { if (c.userData.tool.state === 'held') useTool(c.userData.tool, c); return; }   // a tool in hand works
+  if (panelRay(c)) return;
   const tool = TOOLS[toolIdx], u = partUnder(c);
   if (KIND_OF[tool]) {
     aim(c); const at = ray.ray.origin.clone().add(ray.ray.direction.clone().multiplyScalar(.25)), kind = KIND_OF[tool];
@@ -666,12 +696,14 @@ ctrls.forEach(c => {
   c.addEventListener('selectstart', () => {
     if (!isHand(c)) { trigger(c); return; }
     if (!HANDS) return;
-    if (panel.visible && panelPress(c)) { c.userData.pinch = null; return; }
-    const pt = pinchPoint(c), u = pt ? partNear(pt) : null, h = handleUnder(c);
-    c.userData.pinch = { t: performance.now(), u, h, grabbed: false };
+    if (c.userData.tool) { c.userData.pinch = { tool: true }; return; }   // a recalled tool: this pinch puts it down
+    if (panelRay(c)) { c.userData.pinch = null; return; }
+    const pt = pinchPoint(c), tl = toolUnder(c), u = !tl && pt ? partNear(pt) : null, h = !tl && handleUnder(c);
+    c.userData.pinch = { t: performance.now(), tl, u, h, grabbed: false };
   });
   c.addEventListener('selectend', () => {
     if (!isHand(c) || !HANDS) return;
+    if (c.userData.tool) { c.userData.pinch = null; releaseTool(c); return; }
     const pn = c.userData.pinch; c.userData.pinch = null; if (!pn) return;
     if (pn.grabbed) { grabEnd(c); return; }
     if (performance.now() - pn.t < PINCH_TAP) trigger(c);
@@ -682,8 +714,11 @@ ctrls.forEach(c => {
 function pollPinches() {   // promote a held pinch on a part or the handle to a grab
   if (!HANDS) return;
   for (const c of ctrls) {
-    const pn = c.userData.pinch; if (!pn || pn.grabbed || !(pn.u || pn.h)) continue;
-    if (performance.now() - pn.t >= PINCH_HOLD) { pn.grabbed = true; grabStart(c, pn.u); }
+    const pn = c.userData.pinch; if (!pn || pn.tool || pn.grabbed || !(pn.tl || pn.u || pn.h || (held && held.ctrl !== c))) continue;
+    if (performance.now() - pn.t >= PINCH_HOLD) {
+      pn.grabbed = true;
+      if (pn.tl) grabTool(pn.tl, c); else grabStart(c, pn.u || null);   // the other hand's pinch-hold anywhere = two-hand scale
+    }
   }
 }
 function pollPads() {
@@ -693,136 +728,283 @@ function pollPads() {
     const edge = (k, on) => { const was = pr[k]; pr[k] = on; return on && !was; };
     if (edge('r', ax > .7))  { toolIdx = (toolIdx + 1) % TOOLS.length; tick(c); say('TOOL: ' + TOOLS[toolIdx]); drawPanel(); }
     if (edge('l', ax < -.7)) { toolIdx = (toolIdx + TOOLS.length - 1) % TOOLS.length; tick(c); say('TOOL: ' + TOOLS[toolIdx]); drawPanel(); }
-    if (edge('u', ay < -.7)) { stepIdx = Math.min(2, stepIdx + 1); tick(c); say('SNAP ' + STEPS[stepIdx] + ' mm'); drawPanel(); }
-    if (edge('d', ay > .7))  { stepIdx = Math.max(0, stepIdx - 1); tick(c); say('SNAP ' + STEPS[stepIdx] + ' mm'); drawPanel(); }
+    /* while a part is held, up/down on either stick resizes it (5 % a step, repeating while pushed);
+       otherwise up/down is the snap step, as before */
+    if (held && Math.abs(ay) > .7) {
+      const now = performance.now();
+      if (now - (pr.sc || 0) > 120) { pr.sc = now; scaleHeld(ay < 0 ? 1 : -1); tick(c, .15); sfx(ay < 0 ? 620 : 420, 0.03, 0.03); }
+      pr.u = ay < -.7; pr.d = ay > .7;   // no snap change when the push ends after the part is let go
+    } else {
+      if (edge('u', ay < -.7)) { stepIdx = Math.min(2, stepIdx + 1); tick(c); say('SNAP ' + STEPS[stepIdx] + ' mm'); drawPanel(); }
+      if (edge('d', ay > .7))  { stepIdx = Math.max(0, stepIdx - 1); tick(c); say('SNAP ' + STEPS[stepIdx] + ' mm'); drawPanel(); }
+    }
     if (edge('a', gp.buttons[4] && gp.buttons[4].pressed)) undo(c);   // A or X
     if (edge('b', gp.buttons[5] && gp.buttons[5].pressed)) redo(c);   // B or Y
-    /* left stick click: a short click pins or unpins (as before, now on release); held 1 s it
-       teaches the panel the pose you are holding: whatever way your hand faces you now is the
-       way that shows it from here on (remembered in this browser). */
-    if (c.userData.hand === 'left') {
-      const on = !!(gp.buttons[3] && gp.buttons[3].pressed), now = performance.now();
-      if (on && !pr.sDown) { pr.sDown = now; pr.sTaught = false; }
-      if (on && pr.sDown && !pr.sTaught && now - pr.sDown > 1000) { pr.sTaught = true; teachPanel(c); }
-      if (!on && pr.sDown) { if (!pr.sTaught) { panelPinned = !panelPinned; tick(c); say(panelPinned ? 'Panel pinned.' : 'Panel unpinned.'); } pr.sDown = 0; }
+    /* stick click on either controller: RECALL the last tool into that hand (the wrist panel's
+       pin and teach are gone with the wrist panel) */
+    if (edge('s', !!(gp.buttons[3] && gp.buttons[3].pressed))) recallTool(c);
+  }
+}
+
+/* ---------- WALL PANEL (owner's stand, 2026-10-31 11:24 ET: "move it from my wrist to a panel
+   on the wall to my left") ----------
+   The wrist panel is gone: no palm test, no teaching, nothing to turn your hand for. A fixed
+   board hangs on a wall 1.2 m to your left at chest height (centre 1.25 m), square to where you
+   stand. Eight buttons, each about 19 x 11 cm. Two ways to press: point either controller (or
+   either hand) at it and pull the trigger (pinch), or walk up and poke it with a fingertip or
+   the controller itself. It never moves and never hides. */
+const WALL_X = -1.2, PANEL_W = .44, PANEL_H = .66, PANEL_Y = 1.25, PANEL_Z = .55;
+const wall = new THREE.Mesh(new THREE.BoxGeometry(.06, 2.3, 2.4), new THREE.MeshStandardMaterial({ color:0x3b3330, roughness:.95 }));
+wall.position.set(WALL_X - .03, 1.15, .3); scene.add(wall);
+const BTN = ['MIRROR', 'BED', 'EXPORT', 'REF', 'UNDO', 'REDO', 'RECALL', 'TOOLS HOME'];
+const pc = document.createElement('canvas'); pc.width = 1024; pc.height = 1536;
+const ptex = new THREE.CanvasTexture(pc); ptex.colorSpace = THREE.SRGBColorSpace;   // true amber, not washed out
+const panel = new THREE.Mesh(new THREE.PlaneGeometry(PANEL_W, PANEL_H), new THREE.MeshBasicMaterial({ map:ptex }));
+panel.rotation.y = Math.PI/2; panel.position.set(WALL_X + .006, PANEL_Y, PANEL_Z); scene.add(panel);   // faces +x, into the room
+const panelRim = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(PANEL_W + .02, PANEL_H + .02)), new THREE.LineBasicMaterial({ color:0xffb000 }));
+panelRim.rotation.y = Math.PI/2; panelRim.position.set(WALL_X + .004, PANEL_Y, PANEL_Z); scene.add(panelRim);
+function drawPanel() {
+  const g = pc.getContext('2d'); g.clearRect(0, 0, 1024, 1536);
+  g.fillStyle = '#121315'; g.fillRect(0, 0, 1024, 1536);
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  BTN.forEach((name, i) => {
+    const x = (i % 2) * 512 + 24, y = Math.floor(i / 2) * 300 + 24;
+    const on = name === 'MIRROR' ? mirrorOn : name === 'BED' ? bedBox.visible : name === 'REF' ? dummy.visible : true;
+    g.fillStyle = !on ? '#4a4f57' : (name === 'EXPORT' && pendingSTL) ? '#7dff9a' : (name === 'RECALL' || name === 'TOOLS HOME') ? '#7fc3ff' : '#ffb000';
+    g.fillRect(x, y, 464, 260);
+    g.fillStyle = on ? '#111' : '#eee';
+    let px = 84; do { g.font = `bold ${px}px system-ui, sans-serif`; px -= 4; } while (g.measureText(name).width > 430 && px > 40);
+    g.fillText(name, x + 232, y + 100);
+    const sub = name === 'MIRROR' ? (mirrorOn ? 'ON' : 'OFF') : name === 'BED' ? (bedBox.visible ? 'ON' : 'OFF')
+      : name === 'EXPORT' ? (pendingSTL ? 'HELD' : 'STL') : name === 'REF' ? (dummy.visible ? 'DUMMY ON' : 'DUMMY OFF')
+      : name === 'UNDO' ? 'LAST STEP' : name === 'REDO' ? 'PUT IT BACK' : name === 'RECALL' ? (lastTool ? lastTool.name : 'LAST TOOL') : 'ALL TO BENCH';
+    g.font = 'bold 52px system-ui, sans-serif'; g.fillText(sub, x + 232, y + 192, 440);
+  });
+  g.fillStyle = '#ffb000'; g.font = 'bold 54px system-ui, sans-serif';
+  g.fillText(`TRIGGER: ${TOOLS[toolIdx]}  ·  SNAP ${STEPS[stepIdx]} mm`, 512, 1262, 990);
+  g.fillStyle = '#cfe3ff'; g.font = 'bold 52px system-ui, sans-serif';
+  g.fillText(`TABLE ${tableY.toFixed(2)} m  ·  MIRROR ${mirrorOn ? 'ON' : 'OFF'}`, 512, 1360, 990);
+  g.fillStyle = '#9aa3ad'; g.font = 'bold 40px system-ui, sans-serif';
+  g.fillText('point + trigger, or poke it', 512, 1450, 990);
+  ptex.needsUpdate = true;
+}
+function pressName(name, c) {
+  if (name === 'MIRROR') setMirror(!mirrorOn);
+  if (name === 'BED') { bedBox.visible = !bedBox.visible; refreshButtons(); say(bedBox.visible ? 'BED ON: 220 × 220 × 220 mm.' : 'BED OFF.'); }
+  if (name === 'EXPORT') doExport(c);
+  if (name === 'REF') setDummy(!dummy.visible);
+  if (name === 'UNDO') undo(c);
+  if (name === 'REDO') redo(c);
+  if (name === 'RECALL') recallTool(c);
+  if (name === 'TOOLS HOME') toolsHome();
+  tick(c); sfx(480, 0.04); drawPanel(); return true;
+}
+function pressAt(u, v, c) {   // u, v in canvas pixels (top-left origin)
+  if (v > 1212) return true;                       // the readout: on the board, no button
+  const col = u < 512 ? 0 : 1, row = Math.max(0, Math.min(3, Math.floor(v / 300)));
+  return pressName(BTN[row * 2 + col], c);
+}
+function panelRay(c) {   // point and pull: either hand, either controller
+  aim(c); const h = ray.intersectObject(panel, false)[0]; if (!h || !h.uv) return false;
+  return pressAt(h.uv.x * 1024, (1 - h.uv.y) * 1536, c);
+}
+const _pk = new THREE.Vector3();
+function pokeAt(c, worldPt) {   // walk up and touch it: fingertip or controller within 1.5 cm of the face
+  _pk.copy(worldPt); panel.worldToLocal(_pk);
+  const inside = Math.abs(_pk.x) < PANEL_W/2 && Math.abs(_pk.y) < PANEL_H/2;
+  if (inside && _pk.z < .015 && _pk.z > -.06) {
+    if (!c.userData.poked) { c.userData.poked = true; pressAt((_pk.x / PANEL_W + .5) * 1024, (.5 - _pk.y / PANEL_H) * 1536, c); return true; }
+  } else if (!inside || _pk.z > .04) c.userData.poked = false;
+  return false;
+}
+const _pp = new THREE.Vector3();
+function pokePanel() {
+  for (const c of ctrls) {
+    if (!c.userData.src) continue;
+    if (isHand(c)) { const tip = joint(c, 'index-finger-tip'); if (tip) pokeAt(c, tip.getWorldPosition(_pp)); }
+    else { const g = grips[ctrls.indexOf(c)]; pokeAt(c, (g && g.visible ? g : c).getWorldPosition(_pp)); }
+  }
+}
+
+/* ---------- THE WORKSHOP: the tool bench (owner's design, stand of 2026-10-31: "the tools are a go") ----------
+   No menus for tools. A bench stands to your right, its top at the same height as the work
+   table (it rides the table handle). Every tool lies on its own painted outline with its name.
+   Walk over, pick it up (grip, or pinch and hold), use it, let go.
+     STOCK  SPHERE BOX CYLINDER CAPSULE CONE: carry one to the table and let go over the plate:
+            it becomes a part right there (snapped and seated as always). The bench restocks.
+     CHISEL tip on a part + trigger: the part becomes a CUT (again: it adds back).
+     PIN    tip on a part + trigger: SOLO (not mirrored); again: mirrors again.
+     HAMMER head on a part + trigger: delete it (UNDO brings it back).
+   With tracked hands there is no trigger while you hold: touch the part and keep the tip on it
+   for 0.4 s. Let go of a tool anywhere off its outline (drop it, toss it) and it falls, then
+   floats home to its outline about a second later. RECALL (stick click on either controller,
+   or the wall button) brings the last tool you used flying back into that hand; squeeze and let
+   go to put it down. TOOLS HOME sends every loose tool back. Tools are furniture: never parts,
+   never exported. WORKSHOP = false removes the bench. */
+const WORKSHOP = true;
+const BENCH = { x: .85, z: .25, w: .42, l: .95 };
+const benchMat = new THREE.MeshStandardMaterial({ color:0x6b4a2f, roughness:.85 });
+const benchTop = new THREE.Mesh(new THREE.BoxGeometry(BENCH.w, .04, BENCH.l), benchMat);
+benchTop.position.set(BENCH.x, 0, BENCH.z); benchTop.visible = WORKSHOP; scene.add(benchTop);
+const benchLegs = [];
+for (const [dx, dz] of [[-.18,-.43],[.18,-.43],[-.18,.43],[.18,.43]]) { const l = new THREE.Mesh(new THREE.BoxGeometry(.04, 1, .04), legMat); l.position.set(BENCH.x + dx, 0, BENCH.z + dz); l.visible = WORKSHOP; benchLegs.push(l); scene.add(l); }
+const wood = new THREE.MeshStandardMaterial({ color:0x8a5a33, roughness:.8 }), steel = new THREE.MeshStandardMaterial({ color:0xb8bec6, roughness:.35, metalness:.6 });
+const TOOLDEF = [
+  { name:'SPHERE', stock:'sphere' }, { name:'BOX', stock:'box' }, { name:'CYLINDER', stock:'cylinder' },
+  { name:'CAPSULE', stock:'capsule' }, { name:'CONE', stock:'cone' },
+  { name:'CHISEL', label:'CHISEL · CUT' }, { name:'PIN', label:'PIN · SOLO' }, { name:'HAMMER', label:'HAMMER · DELETE' } ];
+function toolBody(d) {   // tools point their working end along local -Z; the handle runs toward +Z
+  const g = new THREE.Group(), add = (geo, mat, x, y, z, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.x = rx; g.add(m); return m; };
+  if (d.stock) {
+    add(unitGeo(d.stock), new THREE.MeshStandardMaterial({ color:ADD_COL, roughness:.85 }), 0, 0, 0);
+    d.tipL = new THREE.Vector3(); d.reach = .025; d.foot = [.075, .075]; d.lift = BASE[d.stock][1] / 2000; d.label = d.name + ' STOCK';
+    return g;
+  }
+  add(new THREE.CylinderGeometry(.011, .011, .11, 20), wood, 0, 0, .035, Math.PI/2);          // handle
+  if (d.name === 'CHISEL') {
+    add(new THREE.BoxGeometry(.024, .006, .07), new THREE.MeshStandardMaterial({ color:CUT_COL, roughness:.4, metalness:.3, emissive:0x10304a }), 0, 0, -.055);
+    d.tipL = new THREE.Vector3(0, 0, -.09); d.reach = .015; d.lift = .012;
+  } else if (d.name === 'PIN') {
+    add(new THREE.CylinderGeometry(.004, .004, .05, 12), steel, 0, 0, -.045, Math.PI/2);
+    add(new THREE.CylinderGeometry(.02, .02, .012, 28), new THREE.MeshStandardMaterial({ color:0xffd23d, roughness:.4, metalness:.5 }), 0, 0, -.076, Math.PI/2);
+    d.tipL = new THREE.Vector3(0, 0, -.082); d.reach = .02; d.lift = .021;
+  } else {   // HAMMER
+    add(new THREE.CylinderGeometry(.006, .006, .03, 12), steel, 0, 0, -.035, Math.PI/2);
+    add(new THREE.BoxGeometry(.075, .032, .032), new THREE.MeshStandardMaterial({ color:0xd8473a, roughness:.5, metalness:.2 }), 0, 0, -.066);
+    d.tipL = new THREE.Vector3(0, 0, -.066); d.reach = .03; d.lift = .017;
+  }
+  d.foot = [.2, .055];
+  return g;
+}
+const TOOL_YAW = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI/2);   // working end away from you, handle toward you
+const CANON = new THREE.Matrix4().makeTranslation(0, 0, -.03);   // a recalled tool sits in the fist, pointing where you point
+const LOOSE_S = .7, HOME_S = .6, FLY_S = .3, HAND_DWELL = .4;
+const tools = WORKSHOP ? TOOLDEF.map((d, i) => {
+  const body = toolBody(d);   // fills d's tip, reach, footprint and lift first
+  const t = { ...d, obj: body, z: BENCH.z - .35 + i * .1, state:'home', ctrl:null, frame:null, offset:new THREE.Matrix4(),
+              vel:new THREE.Vector3(), lastP:new THREE.Vector3(), t:0, from:{ pos:new THREE.Vector3(), quat:new THREE.Quaternion() }, dwell:0, usedOn:0 };
+  t.obj.userData.tool = t; scene.add(t.obj);
+  t.outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(t.foot[0], t.foot[1])), new THREE.LineBasicMaterial({ color:0xffd23d }));
+  t.outline.rotation.x = -Math.PI/2; scene.add(t.outline);
+  t.tag = labelSprite(t.label); t.tag.material.depthTest = true; t.tag.renderOrder = 0; t.tag.scale.set(.09, .0225, 1); scene.add(t.tag);
+  return t;
+}) : [];
+let lastTool = null;
+function homeOf(t) { return { pos: new THREE.Vector3(BENCH.x, tableY + t.lift, t.z), quat: t.stock ? new THREE.Quaternion() : TOOL_YAW.clone() }; }
+function snapHome(t) { const h = homeOf(t); t.obj.position.copy(h.pos); t.obj.quaternion.copy(h.quat); t.state = 'home'; t.ctrl = null; t.vel.set(0, 0, 0); }
+function layBench() {
+  benchTop.position.y = tableY - .02;
+  for (const l of benchLegs) { l.scale.y = tableY - .04; l.position.y = (tableY - .04) / 2; }
+  for (const t of tools) {
+    t.outline.position.set(BENCH.x, tableY + .001, t.z);
+    t.tag.position.set(BENCH.x - .17, tableY + .03, t.z);
+    if (t.state === 'home') snapHome(t);
+  }
+}
+benchBuilt = true; layBench();
+const toolOf = (o) => { while (o && !o.userData.tool) o = o.parent; return o ? o.userData.tool : null; };
+const tipOf = (t) => t.obj.localToWorld(t.tipL.clone());
+function toolUnder(c) {   // a tool within reach of the fist (7 cm) or the pinch (4 cm); controllers may also point (80 cm)
+  if (!tools.length) return null;
+  let pt = null;
+  if (isHand(c)) pt = pinchPoint(c);
+  else { const g = grips[ctrls.indexOf(c)]; pt = (g && g.visible ? g : c).getWorldPosition(new THREE.Vector3()); }
+  let best = null, bd = isHand(c) ? .04 : .07; const bx = new THREE.Box3();
+  if (pt) for (const t of tools) { if (t.ctrl === c) continue; bx.setFromObject(t.obj); const d = bx.distanceToPoint(pt); if (d <= bd) { bd = d; best = t; } }
+  if (best || isHand(c)) return best;
+  aim(c); const h = ray.intersectObjects(tools.map(t => t.obj), true)[0];
+  return h && h.distance < .8 ? toolOf(h.object) : null;
+}
+function grabTool(t, c, canonical = false) {
+  if (t.ctrl && t.ctrl !== c) t.ctrl.userData.tool = null;   // passed hand to hand
+  const f = frameOf(c); f.updateMatrixWorld(true); t.obj.updateMatrixWorld(true);
+  t.offset = canonical ? CANON.clone() : new THREE.Matrix4().copy(f.matrixWorld).invert().multiply(t.obj.matrixWorld);
+  t.state = 'held'; t.ctrl = c; t.frame = f; c.userData.tool = t; lastTool = t; t.vel.set(0, 0, 0); t.lastP.copy(t.obj.position); t.dwell = 0; t.usedOn = 0;
+  tick(c); sfx(520, 0.05); drawPanel();
+  say(t.stock ? `${t.label}: hold it over the table and let go to place it.`
+              : `${t.label}: touch a part with the ${t.name === 'HAMMER' ? 'head' : 'tip'} and pull the trigger (hands: hold the touch).`);
+}
+function inPlateZone(p) { return Math.abs(p.x) < .3 && Math.abs(p.z) < .3 && p.y > tableY - .02 && p.y < tableY + .35; }
+function releaseTool(c) {
+  const t = c.userData.tool; if (!t) return false;
+  if (t.state === 'flying') return true;               // still on its way in: it lands and stays
+  c.userData.tool = null; t.ctrl = null; t.frame = null;
+  if (t.stock) {
+    const at = t.obj.position.clone();
+    snapHome(t);                                          // the bench restocks at once
+    if (inPlateZone(at)) { addPart(t.stock, [at.x*1000, Math.max(BASE[t.stock][1]/2, (at.y - tableY)*1000), at.z*1000]); tick(c, .3); return true; }
+    say(`Not over the table: the ${t.name} stock goes back on the bench.`); sfx(300, 0.05); return true;
+  }
+  if (t.obj.position.distanceTo(homeOf(t).pos) < .12) { snapHome(t); tick(c, .3); sfx(300, 0.05); say(`${t.label} back on its outline.`); return true; }
+  t.state = 'loose'; t.t = 0; tick(c, .3); say(`${t.label} goes back to the bench by itself.`); return true;
+}
+function beginHome(t) {
+  if (t.state === 'home') return;
+  if (t.ctrl) t.ctrl.userData.tool = null;
+  t.ctrl = null; t.frame = null; t.state = 'homing'; t.t = 0; t.from.pos.copy(t.obj.position); t.from.quat.copy(t.obj.quaternion);
+}
+function toolsHome() { let n = 0; for (const t of tools) if (t.state !== 'home' && t.state !== 'held') { beginHome(t); n++; } say(n ? `TOOLS HOME: ${n} on the way back.` : 'TOOLS HOME: every loose tool is already on the bench.'); }
+function recallTool(c) {
+  const t = lastTool;
+  if (!t) { say('RECALL: no tool used yet. Pick one up from the bench.'); return; }
+  if (!c) { beginHome(t); say(`RECALL: the ${t.label} goes home.`); return; }
+  if (c.userData.tool) { say(`That hand is already holding the ${c.userData.tool.label}.`); return; }
+  if (t.ctrl && t.ctrl !== c) t.ctrl.userData.tool = null;
+  t.state = 'flying'; t.ctrl = c; t.frame = frameOf(c); c.userData.tool = t; t.t = 0;
+  t.from.pos.copy(t.obj.position); t.from.quat.copy(t.obj.quaternion);
+  tick(c); sfx(700, 0.05); say(`RECALL: the ${t.label} comes to your hand.`);
+}
+function useTool(t, c) {
+  lastTool = t;
+  if (t.stock) { say(`${t.label}: hold it over the table and let go to place it.`); tick(c); return false; }
+  const u = partNear(tipOf(t), t.reach);
+  if (!u) { say(`Touch a part with the ${t.name === 'HAMMER' ? 'head' : 'tip'} of the ${t.name}.`); tick(c); sfx(170, 0.08); return false; }
+  if (t.name === 'CHISEL') toggleCut(u.p.id);
+  else if (t.name === 'PIN') toggleSolo(u.p.id);
+  else delPart(u.p.id);
+  tick(c, .8); sfx(t.name === 'HAMMER' ? 200 : 380, 0.07); return true;
+}
+const _tw = new THREE.Matrix4(), _tp = new THREE.Vector3(), _tq = new THREE.Quaternion(), _ts = new THREE.Vector3(), _tv = new THREE.Vector3();
+const ease = (k) => k * k * (3 - 2 * k);
+function updateTools(dt) {
+  for (const t of tools) {
+    if (t.state === 'held') {
+      t.frame.updateMatrixWorld(true);
+      _tw.copy(t.frame.matrixWorld).multiply(t.offset); _tw.decompose(_tp, _tq, _ts);
+      t.obj.position.copy(_tp); t.obj.quaternion.copy(_tq);
+      if (dt > 0) { _tv.copy(_tp).sub(t.lastP).divideScalar(dt); t.vel.lerp(_tv, .5); if (t.vel.length() > 6) t.vel.setLength(6); }
+      t.lastP.copy(_tp);
+      if (isHand(t.ctrl) && !t.stock) {   // hands: keep the touch for 0.4 s
+        const u = partNear(tipOf(t), t.reach);
+        if (u && u.p.id !== t.usedOn) { t.dwell += dt; if (t.dwell >= HAND_DWELL) { t.usedOn = u.p.id; t.dwell = 0; useTool(t, t.ctrl); } }
+        else if (!u) { t.dwell = 0; t.usedOn = 0; }
+      }
+    } else if (t.state === 'loose') {     // let go: it falls (or flies, if tossed) for a moment
+      t.t += dt; t.vel.y -= 9.8 * dt; t.obj.position.addScaledVector(t.vel, dt);
+      if (t.obj.position.y < .02) { t.obj.position.y = .02; t.vel.set(0, 0, 0); }
+      if (t.t >= LOOSE_S) beginHome(t);
+    } else if (t.state === 'homing') {    // then it floats home in a small arc
+      t.t += dt; const k = ease(Math.min(1, t.t / HOME_S)), h = homeOf(t);
+      t.obj.position.lerpVectors(t.from.pos, h.pos, k); t.obj.position.y += Math.sin(Math.PI * k) * .08;
+      t.obj.quaternion.slerpQuaternions(t.from.quat, h.quat, k);
+      if (k >= 1) { snapHome(t); sfx(300, 0.04); }
+    } else if (t.state === 'flying') {    // RECALL: into the hand that called it
+      t.t += dt; const k = ease(Math.min(1, t.t / FLY_S));
+      t.frame.updateMatrixWorld(true); _tw.copy(t.frame.matrixWorld).multiply(CANON); _tw.decompose(_tp, _tq, _ts);
+      t.obj.position.lerpVectors(t.from.pos, _tp, k); t.obj.quaternion.slerpQuaternions(t.from.quat, _tq, k);
+      if (k >= 1) { const c = t.ctrl; grabTool(t, c, true); say(`${t.label} in hand. ${isHand(c) ? 'Pinch and let go' : 'Squeeze and let go'} to put it down.`); }
     }
   }
 }
 
-/* ---------- wrist panel: MIRROR, BED, EXPORT, REFERENCE (6 cm buttons) ---------- */
-/* Third row (control package v2): UNDO and NEXT TOOL, so a tracked hand with no sticks can
-   still undo and change tool. Same 6 cm buttons; the panel grows from 14 to 21 cm tall. */
-const BTN = ['MIRROR', 'BED', 'EXPORT', 'REFERENCE', 'UNDO', 'TOOL'];
-const pc = document.createElement('canvas'); pc.width = 1024; pc.height = 1536;
-const ptex = new THREE.CanvasTexture(pc);
-const panel = new THREE.Mesh(new THREE.PlaneGeometry(.14, .21), new THREE.MeshBasicMaterial({ map:ptex, transparent:true, depthTest:false }));
-panel.renderOrder = 20; panel.visible = false; scene.add(panel);
-let panelPinned = false;
-function drawPanel() {
-  const g = pc.getContext('2d'); g.clearRect(0, 0, 1024, 1536);
-  g.fillStyle = 'rgba(12,13,15,.92)'; g.fillRect(0, 0, 1024, 1536);
-  BTN.forEach((name, i) => {
-    const x = (i % 2) * 512 + 24, y = Math.floor(i / 2) * 400 + 24;
-    const lit = (name === 'MIRROR' && mirrorOn) || (name === 'BED' && bedBox.visible) || name === 'EXPORT' || (name === 'REFERENCE' && dummy.visible) || name === 'UNDO' || name === 'TOOL';
-    g.fillStyle = lit ? (name === 'EXPORT' && pendingSTL ? '#7dff9a' : '#ffb000') : '#4a4f57'; g.fillRect(x, y, 464, 352);
-    g.fillStyle = lit ? '#111' : '#eee'; g.font = 'bold 76px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(name === 'REFERENCE' ? 'REF' : name === 'TOOL' ? 'TOOL ▶' : name, x + 232, y + 150);
-    g.font = 'bold 52px system-ui, sans-serif';
-    const sub = name === 'MIRROR' ? (mirrorOn ? 'ON' : 'OFF') : name === 'BED' ? (bedBox.visible ? 'ON' : 'OFF')
-      : name === 'EXPORT' ? (pendingSTL ? 'HELD' : 'STL') : name === 'UNDO' ? 'LAST STEP' : name === 'TOOL' ? 'NEXT' : (dummy.visible ? 'DUMMY ON' : 'DUMMY OFF');
-    g.fillText(sub, x + 232, y + 250);
-  });
-  g.fillStyle = '#ffb000'; g.font = 'bold 64px system-ui, sans-serif'; g.textAlign = 'center';
-  g.fillText(`${TOOLS[toolIdx]}  ·  SNAP ${STEPS[stepIdx]} mm`, 512, 1300);
-  g.font = 'bold 52px system-ui, sans-serif'; g.fillStyle = '#cfe3ff';
-  g.fillText(`TABLE ${tableY.toFixed(2)} m`, 512, 1420);
-  ptex.needsUpdate = true;
-}
-/* Control package v2, A (owner's stand, letter 45: 'you have it backwards').
-   v1 asked whether the controller's +X pointed up in the world. Two faults: the axis read
-   opposite in his real grip, and a bare .6 threshold chattered at the edge. v2 asks a better
-   question: is the palm turned toward his EYES? The direction from the hand to the head is
-   taken into the controller's own frame and compared with the palm axis. Default palm axis is
-   -X of the controller's ray space, which is the reverse of v1 and follows his report. If that
-   is still wrong for his hand, a 1 s hold of the left stick teaches the axis from the pose he
-   holds (saved). Deadband: shows above 0.80 held 0.12 s, hides below 0.50 held 0.25 s.
-   Tracked hand: the palm normal comes from the wrist and the index and little-finger
-   knuckles, and the hand must be open (fingers out, not pinching). */
-const PANEL_ON = .80, PANEL_OFF = .50, PANEL_ON_MS = 120, PANEL_OFF_MS = 250, AXIS_KEY = 'jinxforge.forgeRoom.palmAxis';
-const palmAxis = new THREE.Vector3(-1, 0, 0);
-try { const a = JSON.parse(localStorage.getItem(AXIS_KEY) || 'null'); if (Array.isArray(a) && a.length === 3) palmAxis.fromArray(a).normalize(); } catch (e) {}
-let panelScore = 0, panelShown = false, panelTimer = 0, panelLast = 0;
-const _h = new THREE.Vector3(), _hp = new THREE.Vector3(), _q = new THREE.Quaternion(), _d = new THREE.Vector3();
-const _n = new THREE.Vector3(), _w = new THREE.Vector3(), _i = new THREE.Vector3(), _l = new THREE.Vector3();
-const _goalP = new THREE.Vector3(), _goalQ = new THREE.Quaternion(), _look = new THREE.Object3D();
-function panelGate(score, dt) {   // the deadband; returns whether the panel is shown
-  panelScore = score;
-  if (!panelShown) { panelTimer = score > PANEL_ON ? panelTimer + dt : 0; if (panelTimer >= PANEL_ON_MS) { panelShown = true; panelTimer = 0; } }
-  else { panelTimer = score < PANEL_OFF ? panelTimer + dt : 0; if (panelTimer >= PANEL_OFF_MS) { panelShown = false; panelTimer = 0; } }
-  return panelShown;
-}
-function leftReading() {   // { score, anchor, normal } for the left hand, or null
-  const left = ctrls.find(c => c.userData.hand === 'left'); if (!left) return null;
-  renderer.xr.getCamera().getWorldPosition(_h);
-  if (isHand(left)) {
-    if (!HANDS) return null;
-    const w = joint(left, 'wrist'), im = joint(left, 'index-finger-metacarpal'), lm = joint(left, 'pinky-finger-metacarpal'),
-          it = joint(left, 'index-finger-tip'), tt = joint(left, 'thumb-tip');
-    if (!w || !im || !lm || !it || !tt) return null;
-    w.getWorldPosition(_w); im.getWorldPosition(_i); lm.getWorldPosition(_l);
-    _n.copy(_l).sub(_w).cross(_i.clone().sub(_w)).normalize();       // left palm normal (out of the palm)
-    const open = it.getWorldPosition(new THREE.Vector3()).distanceTo(_w) > .13 && it.getWorldPosition(new THREE.Vector3()).distanceTo(tt.getWorldPosition(new THREE.Vector3())) > .04;
-    _hp.copy(_w).add(_i).add(_l).multiplyScalar(1/3);
-    _d.copy(_h).sub(_hp).normalize();
-    return { score: open ? _n.dot(_d) : 0, anchor: _hp.clone(), normal: _n.clone() };
-  }
-  left.getWorldQuaternion(_q);
-  const g = grips[ctrls.indexOf(left)];
-  (g && g.visible ? g : left).getWorldPosition(_hp);
-  _d.copy(_h).sub(_hp).normalize();
-  const local = _d.clone().applyQuaternion(_q.clone().invert());       // head direction in the controller's frame
-  return { score: local.dot(palmAxis), anchor: _hp.clone(), normal: palmAxis.clone().applyQuaternion(_q) };
-}
-function teachPanel(c) {   // 1 s hold of the left stick: this pose is the panel pose
-  renderer.xr.getCamera().getWorldPosition(_h); c.getWorldQuaternion(_q);
-  const g = grips[ctrls.indexOf(c)]; (g && g.visible ? g : c).getWorldPosition(_hp);
-  palmAxis.copy(_h).sub(_hp).normalize().applyQuaternion(_q.invert());
-  try { localStorage.setItem(AXIS_KEY, JSON.stringify(palmAxis.toArray())); } catch (e) {}
-  panelShown = true; panelTimer = 0; tick(c, 1); sfx(660, 0.06); setTimeout(() => sfx(880, 0.08), 80);
-  say('PANEL TAUGHT: this hand pose shows the panel.');
-}
-function placePanel() {   // rides the left hand, faces the eye square, eased so it is steady
-  const now = performance.now(), dt = panelLast ? Math.min(100, now - panelLast) : 16; panelLast = now;
-  const r = leftReading(); if (!r) { panel.visible = false; panelShown = false; return; }
-  const shown = panelGate(r.score, dt) || panelPinned;
-  const was = panel.visible; panel.visible = shown; if (!shown) return;
-  /* anchor: 9 cm off the palm toward the eye, so it sits over the hand in his view */
-  _goalP.copy(r.anchor).addScaledVector(_d.copy(_h).sub(r.anchor).normalize(), .09);
-  _look.position.copy(_goalP); _look.up.set(0, 1, 0); _look.lookAt(_h); _goalQ.copy(_look.quaternion);   // square to the eye, no roll
-  if (!was) { panel.position.copy(_goalP); panel.quaternion.copy(_goalQ); }
-  else { const k = 1 - Math.pow(.001, dt / 1000 * 4); panel.position.lerp(_goalP, k); panel.quaternion.slerp(_goalQ, k); }
-}
-function panelPress(c) {
-  if (c.userData.hand === 'left') return false; aim(c);
-  const h = ray.intersectObject(panel, false)[0]; if (!h || !h.uv) return false;
-  /* rows on the 1536 px canvas: 24-376, 424-776, 824-1176 (top down); uv.y is bottom up */
-  const py = (1 - h.uv.y) * 1536, col = h.uv.x < .5 ? 0 : 1;
-  const row = py < 400 ? 0 : py < 800 ? 1 : py < 1200 ? 2 : -1; if (row < 0) return true;
-  const name = BTN[row * 2 + col];
-  if (name === 'MIRROR') setMirror(!mirrorOn);
-  if (name === 'BED') { bedBox.visible = !bedBox.visible; refreshButtons(); say(bedBox.visible ? 'BED ON: 220 × 220 × 220 mm.' : 'BED OFF.'); }
-  if (name === 'EXPORT') doExport(c);
-  if (name === 'REFERENCE') setDummy(!dummy.visible);
-  if (name === 'UNDO') undo(c);
-  if (name === 'TOOL') { toolIdx = (toolIdx + 1) % TOOLS.length; say('TOOL: ' + TOOLS[toolIdx]); drawPanel(); }
-  tick(c); return true;
-}
-
 /* ---------- loop ---------- */
+let loopLast = performance.now();
 renderer.setAnimationLoop(() => {
+  const now = performance.now(), dt = Math.min(.1, (now - loopLast) / 1000); loopLast = now;
   for (const [id, v] of views) v.label.visible = (id === focusId);
   if (!renderer.xr.isPresenting) { controls.update(); bar3d.visible = false; }
-  else { pollPads(); pollPinches(); followTable(); followHeld(); placePanel(); placeBar(); }
+  else { pollPads(); pollPinches(); followTable(); followHeld(); pokePanel(); placeBar(); }
+  updateTools(dt);
   renderer.render(scene, camera);
 });
 addEventListener('resize', () => { camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
@@ -833,20 +1015,38 @@ window.forge = { addPart, setPose, setDims, toggleCut, toggleSolo, delPart, setM
   dummyBox: () => { dummy.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(dummy); return { min:b.min.toArray(), max:b.max.toArray() }; },
   ghostBox: () => { ghost.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(ghost); return { min:b.min.toArray(), max:b.max.toArray() }; },
   get status() { return lastMsg; }, get tableY() { return tableY; }, setTable,
-  panelState: () => ({ visible: panel.visible, pinned: panelPinned, score: panelScore, axis: palmAxis.toArray() }),
-  panelStep: (score, dt) => panelGate(score, dt), handleBox: () => { tableHandle.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(tableHandle); return { min:b.min.toArray(), max:b.max.toArray() }; },
+  panelState: () => { panel.updateMatrixWorld(true); return { visible: panel.visible, pos: panel.getWorldPosition(new THREE.Vector3()).toArray(),
+    normal: new THREE.Vector3(0, 0, 1).applyQuaternion(panel.getWorldQuaternion(new THREE.Quaternion())).toArray(), w: PANEL_W, h: PANEL_H, buttons: BTN.slice() }; },
+  mirrorOn: () => mirrorOn, handleBox: () => { tableHandle.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(tableHandle); return { min:b.min.toArray(), max:b.max.toArray() }; },
   audioUsed: () => typeof window.__audio !== 'undefined',
   floaterIds: () => [...floaterIds], partColor: (id) => views.get(id) ? views.get(id).mesh.material.color.getHex() : null,
   savedRaw: () => { try { return localStorage.getItem(SAVE_KEY); } catch (e) { return 'STORAGE REFUSED'; } } };
+/* workshop v1 test hooks: drive the controllers as plain objects (no headset needed) */
+window.forge.ws = {
+  tools: () => tools.map(t => ({ name: t.name, state: t.state, pos: t.obj.position.toArray(), home: homeOf(t).pos.toArray(), held: t.ctrl ? ctrls.indexOf(t.ctrl) : -1 })),
+  place: (i, p, yawDeg = 0, pitchDeg = 0) => { const c = ctrls[i]; c.matrixAutoUpdate = false;
+    c.matrix.compose(new THREE.Vector3(...p), new THREE.Quaternion().setFromEuler(new THREE.Euler(THREE.MathUtils.degToRad(pitchDeg), THREE.MathUtils.degToRad(yawDeg), 0, 'YXZ')), new THREE.Vector3(1, 1, 1));
+    c.updateMatrixWorld(true); },
+  grab: (i) => grabStart(ctrls[i]), release: (i) => grabEnd(ctrls[i]), trigger: (i) => trigger(ctrls[i]), recall: (i) => recallTool(ctrls[i]),
+  press: (name, i) => pressName(name, i === undefined ? null : ctrls[i]), poke: (i, p) => pokeAt(ctrls[i], new THREE.Vector3(...p)),
+  buttonWorld: (name, out = .0) => { const i = BTN.indexOf(name), u = ((i % 2) * 512 + 256) / 1024, v = (Math.floor(i / 2) * 300 + 154) / 1536;
+    panel.updateMatrixWorld(true); return panel.localToWorld(new THREE.Vector3((u - .5) * PANEL_W, (.5 - v) * PANEL_H, out)).toArray(); },
+  tip: (name) => tipOf(tools.find(t => t.name === name)).toArray(), scale: (s) => scaleHeld(s), follow: () => followHeld(),
+  held: () => held ? { id: held.p.id, dims: held.p.dims.slice(), twoHand: !!twoHand } : null, step: (dt) => updateTools(dt),
+  lastTool: () => lastTool ? lastTool.name : null,
+  view: (p, t) => { camera.position.set(...p); controls.target.set(...t); controls.update(); } };
 refreshButtons();
 { /* P1 restore: the last saved work comes back; one UNDO returns to an empty table */
   const sv = AUTOSAVE ? readSave() : null; let n = 0;
   if (sv) { try { n = JSON.parse(sv.state).parts.length; } catch (e) { n = 0; } }
   if (n > 0) {
-    undoStack.push(lastState); mirrorOn = sv.mirrorOn !== false; stepIdx = Number.isInteger(sv.stepIdx) ? sv.stepIdx : stepIdx;
+    /* mirror: a save from this version keeps its switch; any older save (v3 and before, when
+       the room started with it ON) comes back OFF, per the owner's default-off ruling */
+    undoStack.push(lastState); mirrorOn = (sv.v >= 4) ? sv.mirrorOn === true : false; stepIdx = Number.isInteger(sv.stepIdx) ? sv.stepIdx : stepIdx;
     restore(sv.state);
     say(`RESTORED your last work: ${n} part${n === 1 ? '' : 's'}. UNDO clears the table.`);
   } else say('Kernel ready. Place a part.');
+  plane.visible = mirrorOn; refreshButtons();   // the amber mirror sheet only shows when MIRROR is on
 }
 window.__ready = true;
 </script>
