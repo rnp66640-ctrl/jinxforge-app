@@ -72,6 +72,7 @@
 </div>
 
 <button id="exportBtn">EXPORT STL</button>
+<button id="voiceBtn" style="position:fixed;left:290px;bottom:26px;z-index:11;font-size:30px;font-weight:800;letter-spacing:0.5px;padding:20px 34px;color:#0d1a12;background:#7dd87d;border:none;border-radius:14px;box-shadow:0 6px 0 #3f7a3f,0 10px 22px rgba(0,0,0,0.45);cursor:pointer;touch-action:none;">VOICE TEST</button>
 <div id="status">Block: 100 &times; 60 &times; 60 mm</div>
 
 <script type="module">
@@ -276,8 +277,29 @@ function exportSTL() {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
   setStatus('Saved room-zero-block.stl — 100 × 60 × 60 mm, ready to slice.');
+  speak('Exported. One block, one hundred by sixty by sixty millimetres.');
 }
 document.getElementById('exportBtn').addEventListener('click', exportSTL);
+
+/* ---------- voice (Web Speech, built into the browser; no key, no cost) ----------
+   Rung beside EXPORT, per Janx's proposal keyed by Jinx under Richard's
+   two-key grant, 2026-10-30. The VOICE TEST button settles whether the
+   Quest browser carries a usable voice; the export confirmation speaks
+   the same line the status bar shows. If speechSynthesis is absent,
+   both degrade silently to the status text. */
+function speak(text) {
+  try {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0;
+    window.speechSynthesis.speak(u);
+  } catch (e) { /* voice is a courtesy, never a blocker */ }
+}
+document.getElementById('voiceBtn').addEventListener('click', () => {
+  speak('Room Zero. One block, one hundred millimetres.');
+  setStatus('Voice test spoken — if you heard nothing, this browser has no voice.');
+});
 
 /* ---------- main loop / resize ---------- */
 renderer.setAnimationLoop(() => {
