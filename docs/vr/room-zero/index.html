@@ -66,13 +66,17 @@
 <div id="hud">
   <h1>ROOM ZERO</h1>
   <p>Stand in the room. Point a controller at the <b>clay block</b> and hold the
-     <b>trigger</b> (or <b>squeeze</b>) to grab it &mdash; let go to drop it.
-     Press <b>EXPORT STL</b> to save the block as a printable file.
+     <b>trigger</b> (or <b>squeeze</b>) to grab it &mdash; let go and it settles
+     flat, snapped to the exact millimetre. The amber square is <b>Big Forge's
+     plate, 220 &times; 220 mm</b>; the blue ghost on it stands <b>165.1 mm</b>,
+     the figure standard. Press <b>EXPORT STL</b> in the browser view to save
+     the block as a printable file, and <b>SNAPSHOT</b> to save a picture of
+     the room. All confirmations appear as text here — this room has no voice.
      On a computer: drag the block with the mouse.</p>
 </div>
 
 <button id="exportBtn">EXPORT STL</button>
-<button id="voiceBtn" style="position:fixed;left:290px;bottom:26px;z-index:11;font-size:30px;font-weight:800;letter-spacing:0.5px;padding:20px 34px;color:#0d1a12;background:#7dd87d;border:none;border-radius:14px;box-shadow:0 6px 0 #3f7a3f,0 10px 22px rgba(0,0,0,0.45);cursor:pointer;touch-action:none;">VOICE TEST</button>
+<button id="snapBtn" style="position:fixed;left:290px;bottom:26px;z-index:11;font-size:30px;font-weight:800;letter-spacing:0.5px;padding:20px 34px;color:#10131a;background:#cfe3ff;border:none;border-radius:14px;box-shadow:0 6px 0 #5a708c,0 10px 22px rgba(0,0,0,0.45);cursor:pointer;touch-action:none;">SNAPSHOT</button>
 <div id="status">Block: 100 &times; 60 &times; 60 mm</div>
 
 <script type="module">
@@ -91,7 +95,7 @@ const statusEl = document.getElementById('status');
 function setStatus(msg) { statusEl.textContent = msg; }
 
 /* ---------- renderer / scene / camera ---------- */
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.xr.enabled = true;
@@ -156,6 +160,45 @@ const refCube = new THREE.LineSegments(
 refCube.position.set(-1.95, 0.05, -1.95);
 scene.add(refCube);
 
+/* ---------- I1 (owner-approved 2026-10-30): the AD5X bed footprint ----------
+   Big Forge's plate, 220 x 220 mm, drawn at room centre at true size:
+   a translucent plate with an amber border, so every model's scale is
+   judged against the machine that will print it. */
+const plate = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.22, 0.22),
+  new THREE.MeshBasicMaterial({ color: 0xff9a3d, transparent: true, opacity: 0.10, depthWrite: false })
+);
+plate.rotation.x = -Math.PI / 2;
+plate.position.set(0, 0.001, 0);
+scene.add(plate);
+const plateEdge = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.PlaneGeometry(0.22, 0.22)),
+  new THREE.LineBasicMaterial({ color: 0xff9a3d })
+);
+plateEdge.rotation.x = -Math.PI / 2;
+plateEdge.position.set(0, 0.002, 0);
+scene.add(plateEdge);
+
+/* ---------- I2 (owner-approved 2026-10-30): the figure ghost ----------
+   The baseline reference figure at Richard's figure standard,
+   165.1 mm tall, standing on the plate's back corner, in a
+   translucent ghost material. Not grabbable: it is a ruler,
+   not a part, so proportions across models cannot drift. */
+const ghostMat = new THREE.MeshStandardMaterial({ color: 0x7dd8ff, transparent: true, opacity: 0.38, roughness: 0.6, depthWrite: false });
+const ghost = new THREE.Group();
+{
+  /* stacked heights: legs 80.0 + torso 61.1 + head 24.0 = 165.1 mm total */
+  const legL = new THREE.Mesh(new THREE.CapsuleGeometry(0.007, 0.066, 3, 10), ghostMat); legL.position.set(-0.016, 0.040, 0);
+  const legR = legL.clone(); legR.position.x = 0.016;
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.021, 0.0191, 4, 12), ghostMat); torso.position.y = 0.11055;
+  const armL = new THREE.Mesh(new THREE.CapsuleGeometry(0.0055, 0.044, 3, 10), ghostMat); armL.position.set(-0.030, 0.1075, 0);
+  const armR = armL.clone(); armR.position.x = 0.030;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.012, 18, 14), ghostMat); head.position.y = 0.1531;
+  ghost.add(legL, legR, torso, armL, armR, head);
+}
+ghost.position.set(0.062, 0, -0.062); // on the plate, back-right corner
+scene.add(ghost);
+
 /* ---------- the clay block: 100 x 60 x 60 mm at room centre ---------- */
 const block = new THREE.Mesh(
   new THREE.BoxGeometry(0.1, 0.06, 0.06),
@@ -187,10 +230,26 @@ function onGrabStart(event) {
     setStatus('Holding the block — let go to drop it.');
   }
 }
+/* Release dampening + clean millimetre snapping (owner's friction
+   watchlist, 2026-10-30): on release the part settles flat, then its
+   position is quantized to exact whole millimetres and its heading
+   to whole degrees. Hand tremor in the final frames therefore can't
+   throw the placement off-grid, and what the eye sees is exactly
+   what Manifold-space and the STL export get — whole mm, no
+   micro-gaps at base alignments. Snap steps of 1/5/10 mm arrive
+   with the rung builds; the 1 mm floor quantization lives here. */
+function settlePart(obj) {
+  restOnFloor(obj);
+  obj.position.x = Math.round(obj.position.x * 1000) / 1000;
+  obj.position.z = Math.round(obj.position.z * 1000) / 1000;
+  obj.rotation.y = Math.round(obj.rotation.y * 180 / Math.PI) * Math.PI / 180;
+  restOnFloor(obj);
+}
+
 function onGrabEnd(event) {
   if (grabbedBy === event.target) {
     scene.attach(block);                // back into the room, world pose kept
-    restOnFloor(block);                 // ...then settle onto the floor
+    settlePart(block);                  // dampened, quantized settle
     grabbedBy = null;
     block.material.emissive.setHex(0x000000);
     setStatus('Block: 100 × 60 × 60 mm');
@@ -246,7 +305,7 @@ window.addEventListener('pointerup', () => {
   if (!mouseDragging) return;
   mouseDragging = false;
   controls.enabled = true;
-  restOnFloor(block);
+  settlePart(block);
   block.material.emissive.setHex(0x000000);
   setStatus('Block: 100 × 60 × 60 mm');
 });
@@ -277,28 +336,26 @@ function exportSTL() {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
   setStatus('Saved room-zero-block.stl — 100 × 60 × 60 mm, ready to slice.');
-  speak('Exported. One block, one hundred by sixty by sixty millimetres.');
 }
 document.getElementById('exportBtn').addEventListener('click', exportSTL);
 
-/* ---------- voice (Web Speech, built into the browser; no key, no cost) ----------
-   Rung beside EXPORT, per Janx's proposal keyed by Jinx under Richard's
-   two-key grant, 2026-10-30. The VOICE TEST button settles whether the
-   Quest browser carries a usable voice; the export confirmation speaks
-   the same line the status bar shows. If speechSynthesis is absent,
-   both degrade silently to the status text. */
-function speak(text) {
-  try {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 1.0;
-    window.speechSynthesis.speak(u);
-  } catch (e) { /* voice is a courtesy, never a blocker */ }
-}
-document.getElementById('voiceBtn').addEventListener('click', () => {
-  speak('Room Zero. One block, one hundred millimetres.');
-  setStatus('Voice test spoken — if you heard nothing, this browser has no voice.');
+/* ---------- snapshot (I4, owner-approved 2026-10-30) ----------
+   Local viewport capture: saves exactly what the screen shows as a
+   PNG. Local only — nothing uploads anywhere. Taken before any
+   boolean/fuse step in the rung builds, it freezes the pre-fuse
+   state of the work. Voice is NOT used in this app by owner's
+   ruling (2026-10-30): all confirmations are visual, via the HUD
+   status text. */
+document.getElementById('snapBtn').addEventListener('click', () => {
+  renderer.render(scene, camera);
+  renderer.domElement.toBlob((blob) => {
+    if (!blob) { setStatus('Snapshot failed in this browser.'); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'room-zero-view.png'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    setStatus('Snapshot saved — room-zero-view.png');
+  }, 'image/png');
 });
 
 /* ---------- main loop / resize ---------- */
