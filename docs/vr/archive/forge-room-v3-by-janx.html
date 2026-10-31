@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Forge Room — Rungs 1 to 3 (v3)</title>
+<!-- JANX FORGE ROOM, RUNGS 1-3 - check word TRESTLE, version 3.
+     v3 = v2 (SHA-256 b8c18042...ecb19d, byte-exact base) plus the three improvements keyed under
+     the grant (Janx letter, Jinx letter 40): P1 auto-save (local, silent; restored on load, and
+     one UNDO clears the table), P2 floaters shown red on export and named, P3 bed-fit warning on
+     export (larger than 220 x 220 x 220, off the plate edge, or below the table top). Each is
+     reversible: set AUTOSAVE, SHOW_FLOATERS or BED_CHECK to false.
+     Version 2 header follows.
+     Rebuilt on Room Zero v2 (repo 052d47f, Jinx): same room, same metres, same three.js pin,
+     Room Zero v2's laws carried: no voice and no sound anywhere (owner ruling 2026-10-30),
+     HUD text for every confirmation, whole-mm settle on release, AD5X plate, 165.1 mm ghost,
+     SNAPSHOT. Rungs 1-3 on top: five primitives, grab, two-hand scale, snap 1/5/10, live mirror
+     (ON by default, owner's switch) with SOLO, cut, undo/redo, wrist panel, Manifold export
+     with a pieces check. New in v2: the life-size dummy (owner's order, letter 36) under REF,
+     an in-headset status bar (the page HUD is not visible inside an immersive session), and
+     EXPORT inside the headset builds and holds the file; it is saved from the browser view. -->
+<style>
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#20242a;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:#f2f0eb; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; }
+  #hud { position:fixed; top:0; left:0; right:0; padding:14px 20px 8px; pointer-events:none;
+    background:linear-gradient(to bottom, rgba(10,12,14,.75), rgba(10,12,14,0)); z-index:10; }
+  #hud h1 { margin:0 0 4px; font-size:34px; font-weight:800; }
+  #hud p { margin:0; font-size:20px; line-height:1.35; max-width:980px; }
+  #hud b { color:#ffb37a; }
+  #bar { position:fixed; left:14px; right:14px; bottom:72px; /* clear of the ENTER VR button */ z-index:11; display:flex; flex-wrap:wrap; gap:10px; }
+  #bar button { font-size:22px; font-weight:800; padding:14px 18px; border:none; border-radius:12px;
+    color:#1d1208; background:#ff9a3d; box-shadow:0 5px 0 #b35f14; cursor:pointer; }
+  #bar button.off { background:#4a4f57; color:#e6e6e6; box-shadow:0 5px 0 #2b2f35; }
+  #bar button.cut { background:#7fc3ff; box-shadow:0 5px 0 #3d7fb8; }
+  #bar button.ready { background:#7dff9a; box-shadow:0 5px 0 #2f9a4a; }
+  #status { position:fixed; right:18px; top:120px; z-index:11; font-size:22px; font-weight:700; color:#cfe3ff;
+    background:rgba(10,12,14,.6); padding:10px 16px; border-radius:10px; max-width:44vw; text-align:right; white-space:pre-line; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="hud">
+  <h1>FORGE ROOM &middot; RUNGS 1&ndash;3 &middot; v2</h1>
+  <p>VR: <b>trigger</b> = tool (place / cut / solo / delete) &middot; <b>grip</b> = grab, both grips = scale &middot;
+     <b>stick left/right</b> = next tool, <b>up/down</b> = snap 1/5/10 mm &middot; <b>A/X</b> undo, <b>B/Y</b> redo &middot;
+     <b>left palm up</b> (or left stick click) = wrist panel. Every answer shows as text. Desktop: buttons below, drag parts with the mouse, shift + wheel scales.</p>
+</div>
+<div id="bar">
+  <button data-add="sphere">+ SPHERE</button><button data-add="box">+ BOX</button>
+  <button data-add="cylinder">+ CYLINDER</button><button data-add="capsule">+ CAPSULE</button>
+  <button data-add="cone">+ CONE</button>
+  <button id="bMirror">MIRROR ON</button><button id="bCut" class="off">CUT MODE OFF</button>
+  <button id="bUndo">UNDO</button><button id="bRedo">REDO</button>
+  <button id="bBed" class="off">BED OFF</button><button id="bRef">DUMMY ON</button>
+  <button id="bExport">EXPORT STL</button><button id="bSnap">SNAPSHOT</button>
+</div>
+<div id="status">loading kernel...</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+import Module from 'https://cdn.jsdelivr.net/npm/manifold-3d@3.0.0/manifold.js';
+
+/* Units: scene in METRES, true scale (Room Zero's law). Parts are stored in MM, Y up,
+   measured from the plate centre on the table top. The plate centre is the origin of
+   every export and the mirror plane is x = 0 through it.
+   TABLE_Y lifts the plate and ghost to working height. Set it to 0 to put them back on
+   the floor exactly where Room Zero v2 has them. */
+const TABLE_Y = 0.85;
+/* v3 switches (improvement grant: every change reversible) */
+const AUTOSAVE = true, SHOW_FLOATERS = true, BED_CHECK = true;
+const SAVE_KEY = 'jinxforge.forgeRoom.work';   // this browser only; nothing leaves the headset
+const BED_MM = 220;
+const STEPS = [1, 5, 10];
+const TOOLS = ['PLACE SPHERE','PLACE BOX','PLACE CYLINDER','PLACE CAPSULE','PLACE CONE','CUT','SOLO','DELETE'];
+const KIND_OF = { 'PLACE SPHERE':'sphere','PLACE BOX':'box','PLACE CYLINDER':'cylinder','PLACE CAPSULE':'capsule','PLACE CONE':'cone' };
+const BASE = { sphere:[40,40,40], box:[40,40,40], cylinder:[40,40,40], capsule:[30,60,30], cone:[40,40,40] }; // W,H,D mm
+const DUMMY_H = 1828.8;  // owner's height, 6 ft flat, mm
+
+/* ---------- status: page HUD and the in-headset bar say the same words ---------- */
+const statusEl = document.getElementById('status');
+let lastMsg = '';
+function say(s) { lastMsg = s; statusEl.textContent = s; drawBar(s); }
+
+/* ---------- kernel ---------- */
+const wasm = await Module({ locateFile: () => 'https://cdn.jsdelivr.net/npm/manifold-3d@3.0.0/manifold.wasm' });
+wasm.setup();
+const { Manifold } = wasm;
+
+/* ---------- renderer, room (as Room Zero v2) ---------- */
+const renderer = new THREE.WebGLRenderer({ antialias:true, preserveDrawingBuffer:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local-floor');
+document.getElementById('app').appendChild(renderer.domElement);
+document.body.appendChild(VRButton.createButton(renderer));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x2b3038);
+const rig = new THREE.Group(); scene.add(rig);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.01, 100);
+camera.position.set(0.32, TABLE_Y + 0.28, 0.42);
+rig.add(camera);
+renderer.xr.addEventListener('sessionstart', () => { rig.position.set(0, 0, 0.55); say('In the room. Place a part.'); });
+renderer.xr.addEventListener('sessionend', () => {
+  rig.position.set(0, 0, 0);
+  say(pendingSTL ? 'Left the room. Your STL is ready: press SAVE STL.' : 'Left the room.');
+});
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, TABLE_Y + 0.04, 0); controls.enableDamping = true;
+
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x4a4136, 1.15));
+const sun = new THREE.DirectionalLight(0xfff1dd, 1.6); sun.position.set(2.5, 4, 1.5); scene.add(sun);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshStandardMaterial({ color:0x565e68, roughness:.95 }));
+floor.rotation.x = -Math.PI/2; floor.position.y = -0.002; scene.add(floor);
+const gf = new THREE.GridHelper(4, 40, 0x8a94a2, 0x77808e); gf.material.transparent = true; gf.material.opacity = .28; scene.add(gf);
+const gb = new THREE.GridHelper(4, 8, 0xd7dee9, 0xaeb8c6); gb.material.transparent = true; gb.material.opacity = .65; gb.position.y = .0015; scene.add(gb);
+const refCube = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(.1, .1, .1)), new THREE.LineBasicMaterial({ color:0xffd23d }));
+refCube.position.set(-1.95, .05, -1.95); scene.add(refCube);   // Room Zero's 100 mm cube
+
+/* work table: 0.6 m square, top at TABLE_Y */
+if (TABLE_Y > 0) {
+  const table = new THREE.Mesh(new THREE.BoxGeometry(.6, .04, .6), new THREE.MeshStandardMaterial({ color:0x3a3f47, roughness:.9 }));
+  table.position.y = TABLE_Y - .02; scene.add(table);
+  const legGeo = new THREE.BoxGeometry(.04, TABLE_Y - .04, .04), legMat = new THREE.MeshStandardMaterial({ color:0x2e3238 });
+  for (const [x, z] of [[-.27,-.27],[.27,-.27],[-.27,.27],[.27,.27]]) { const l = new THREE.Mesh(legGeo, legMat); l.position.set(x, (TABLE_Y-.04)/2, z); scene.add(l); }
+}
+/* I1: Big Forge's plate, 220 x 220 mm, translucent with amber border (Room Zero v2), plus a 10 mm grid */
+const plate = new THREE.Mesh(new THREE.PlaneGeometry(.22, .22),
+  new THREE.MeshBasicMaterial({ color:0xff9a3d, transparent:true, opacity:.10, depthWrite:false }));
+plate.rotation.x = -Math.PI/2; plate.position.set(0, TABLE_Y + .001, 0); scene.add(plate);
+const plateEdge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(.22, .22)), new THREE.LineBasicMaterial({ color:0xff9a3d }));
+plateEdge.rotation.x = -Math.PI/2; plateEdge.position.set(0, TABLE_Y + .002, 0); scene.add(plateEdge);
+const bedGrid = new THREE.GridHelper(.22, 22, 0xffb000, 0x666c75); bedGrid.position.y = TABLE_Y + .0005; scene.add(bedGrid);
+const bedBox = new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(-.11, TABLE_Y, -.11), new THREE.Vector3(.11, TABLE_Y + .22, .11)), 0x3399ff);
+bedBox.visible = false; scene.add(bedBox);
+
+/* I2: the 165.1 mm figure ghost (Room Zero v2's figure, unchanged), on the plate's back-right corner.
+   Legs 80.0 + torso 61.1 + head 24.0 = 165.1 mm. A ruler, not a part: never grabbed, never exported. */
+const ghostMat = new THREE.MeshStandardMaterial({ color:0x7dd8ff, transparent:true, opacity:.38, roughness:.6, depthWrite:false });
+const ghost = new THREE.Group();
+{
+  const legL = new THREE.Mesh(new THREE.CapsuleGeometry(.007, .066, 3, 10), ghostMat); legL.position.set(-.016, .040, 0);
+  const legR = legL.clone(); legR.position.x = .016;
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(.021, .0191, 4, 12), ghostMat); torso.position.y = .11055;
+  const armL = new THREE.Mesh(new THREE.CapsuleGeometry(.0055, .044, 3, 10), ghostMat); armL.position.set(-.030, .1075, 0);
+  const armR = armL.clone(); armR.position.x = .030;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(.012, 18, 14), ghostMat); head.position.y = .1531;
+  ghost.add(legL, legR, torso, armL, armR, head);
+}
+ghost.position.set(.062, TABLE_Y, -.062); scene.add(ghost);
+
+/* mirror plane: amber sheet at x = 0 */
+const plane = new THREE.Mesh(new THREE.PlaneGeometry(.26, .24),
+  new THREE.MeshBasicMaterial({ color:0xffb000, transparent:true, opacity:.13, side:THREE.DoubleSide, depthWrite:false }));
+plane.rotation.y = Math.PI/2; plane.position.set(0, TABLE_Y + .12, 0); scene.add(plane);
+
+/* ---------- the life-size dummy (owner's order, letter 36) ----------
+   Constructed proportions only: a mannequin, not a portrait. Stands on the floor beside the
+   table at 1828.8 mm to the crown. Legs 877.8 (48 %), shoulders 465 across, head 244.
+   Never grabbed, never exported. Toggled under REF. */
+const DIMS = { crown: 1828.8, head: 244, crotch: 877.8, shoulders: 465 };
+function buildDummy() {
+  const mat = new THREE.MeshStandardMaterial({ color:0xb9b2a8, roughness:.8 });
+  const g = new THREE.Group(), mm = (v) => v / 1000;
+  const ell = (rx, ry, rz, x, y, z) => { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), mat); m.scale.set(mm(rx), mm(ry), mm(rz)); m.position.set(mm(x), mm(y), mm(z)); g.add(m); return m; };
+  const cap = (r, y0, y1, x, z = 0) => { const len = Math.max(0.001, y1 - y0 - 2*r); const m = new THREE.Mesh(new THREE.CapsuleGeometry(mm(r), mm(len), 6, 16), mat); m.position.set(mm(x), mm((y0 + y1)/2), mm(z)); g.add(m); return m; };
+  const hr = DIMS.head / 2;
+  ell(78, hr, 98, 0, DIMS.crown - hr, 8);                // head, crown at 1828.8
+  cap(55, 1530, 1620, 0);                                // neck
+  ell(175, 210, 110, 0, 1330, 0);                        // chest
+  ell(160, 150, 105, 0, 1000, 0);                        // pelvis
+  const sx = DIMS.shoulders / 2 - 60;
+  for (const s of [-1, 1]) {
+    ell(60, 60, 60, s*sx, 1468, 0);                      // shoulder, outer edge at 232.5
+    cap(45, 1150, 1470, s*185);                          // upper arm
+    cap(38, 870, 1170, s*185);                           // forearm
+    ell(35, 80, 22, s*185, 800, 0);                      // hand
+    cap(75, 470, DIMS.crotch + 60, s*95);                // thigh
+    cap(52, 70, 490, s*95);                              // shin
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(mm(100), mm(70), mm(260)), mat);
+    foot.position.set(mm(s*95), mm(35), mm(60)); g.add(foot);   // sole at the floor
+  }
+  return g;
+}
+const dummy = buildDummy();
+dummy.position.set(-.75, 0, .15); scene.add(dummy);
+const dummyTag = (() => {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = 'rgba(10,12,14,.8)'; g.fillRect(0, 0, 512, 128); g.fillStyle = '#ffb000';
+  g.font = 'bold 60px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('1828.8 mm · 6 ft', 256, 66);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c) })); s.scale.set(.24, .06, 1);
+  s.position.set(-.75, DUMMY_H/1000 + .08, .15); scene.add(s); return s;
+})();
+function setDummy(on) { dummy.visible = on; dummyTag.visible = on; refreshButtons(); say(on ? 'DUMMY ON: 1828.8 mm, your height.' : 'DUMMY OFF.'); }
+
+/* ---------- in-headset status bar: the page HUD is not drawn inside an immersive session ---------- */
+const barCanvas = document.createElement('canvas'); barCanvas.width = 2048; barCanvas.height = 256;
+const barTex = new THREE.CanvasTexture(barCanvas);
+const bar3d = new THREE.Mesh(new THREE.PlaneGeometry(.64, .08), new THREE.MeshBasicMaterial({ map:barTex, transparent:true, depthTest:false }));
+bar3d.renderOrder = 30; bar3d.visible = false; scene.add(bar3d);
+function drawBar(text) {
+  const g = barCanvas.getContext('2d'); g.clearRect(0, 0, 2048, 256);
+  g.fillStyle = 'rgba(10,12,14,.85)'; g.fillRect(0, 0, 2048, 256);
+  g.fillStyle = '#cfe3ff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const lines = String(text).split('\n').slice(0, 2);
+  const px = lines.length > 1 ? 88 : 110; g.font = `bold ${px}px system-ui, sans-serif`;   // about 3 cm tall at 1 m
+  lines.forEach((l, i) => g.fillText(l, 1024, lines.length > 1 ? 72 + i*112 : 128, 2000));
+  barTex.needsUpdate = true;
+}
+const _eye = new THREE.Vector3(), _fwd = new THREE.Vector3(), _goal = new THREE.Vector3();
+function placeBar() {   // lazy follow: 1 m ahead, a little below the eye line, eases into place
+  const cam = renderer.xr.getCamera(); cam.getWorldPosition(_eye); cam.getWorldDirection(_fwd);
+  _fwd.y = 0; if (_fwd.lengthSq() < 1e-6) _fwd.set(0, 0, -1); _fwd.normalize();
+  _goal.copy(_eye).addScaledVector(_fwd, 1.0); _goal.y = _eye.y - .28;
+  bar3d.position.lerp(_goal, bar3d.visible ? .06 : 1); bar3d.lookAt(_eye); bar3d.visible = true;
+}
+
+/* ---------- feedback: a haptic tick only. No sound anywhere (owner ruling). ---------- */
+function tick(ctrl, strength = .5) {
+  const hp = ctrl && ctrl.userData.src && ctrl.userData.src.gamepad && ctrl.userData.src.gamepad.hapticActuators;
+  if (hp && hp[0] && hp[0].pulse) hp[0].pulse(strength, 30);
+}
+
+/* ---------- state ---------- */
+// part: {id, kind, dims:[W,H,D] mm, pos:[x,y,z] mm (y up, from plate centre on the table top), quat:[x,y,z,w], cut, solo}
+let focusId = 0, parts = [], nextId = 1, mirrorOn = true, stepIdx = 1, toolIdx = 0, cutDesk = false, pendingSTL = null;
+const undoStack = [], redoStack = [];
+const snapshot = () => JSON.stringify({ parts, nextId });
+let lastState = snapshot();
+function commit() { undoStack.push(lastState); if (undoStack.length > 500) undoStack.shift(); redoStack.length = 0; lastState = snapshot(); pendingSTL = null; clearFloaters(); autoSave(); refreshButtons(); }
+/* P1 auto-save: local, silent. Written on every change (undo and redo included). A browser that
+   refuses storage simply goes without; the room works the same. */
+function autoSave() {
+  if (!AUTOSAVE) return;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v:3, savedAt: Date.now(), state: lastState, mirrorOn, stepIdx })); } catch (e) {}
+}
+function readSave() { try { const o = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return o && o.state ? o : null; } catch (e) { return null; } }
+function restore(s) { const o = JSON.parse(s); parts = o.parts; nextId = o.nextId; lastState = s; pendingSTL = null; rebuildAll(); clearFloaters(); autoSave(); }
+function undo(ctrl) { if (!undoStack.length) { say('Nothing to undo.'); return; } redoStack.push(lastState); restore(undoStack.pop()); tick(ctrl); say('UNDO.'); }
+function redo(ctrl) { if (!redoStack.length) { say('Nothing to redo.'); return; } undoStack.push(lastState); restore(redoStack.pop()); tick(ctrl); say('REDO.'); }
+
+/* ---------- display meshes ---------- */
+const group = new THREE.Group(); scene.add(group);
+const views = new Map();
+const ADD_COL = 0xc9703f, CUT_COL = 0x7fc3ff;
+function unitGeo(kind) {
+  switch (kind) {
+    case 'sphere':   return new THREE.SphereGeometry(.02, 40, 24);
+    case 'box':      return new THREE.BoxGeometry(.04, .04, .04);
+    case 'cylinder': return new THREE.CylinderGeometry(.02, .02, .04, 48);
+    case 'capsule':  return new THREE.CapsuleGeometry(.015, .03, 12, 32);
+    case 'cone':     return new THREE.ConeGeometry(.02, .04, 48);
+  }
+}
+function labelSprite(text) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  const g = c.getContext('2d'); g.fillStyle = 'rgba(10,12,14,.8)'; g.fillRect(0, 0, 512, 128);
+  let px = 84; g.textAlign = 'center'; g.textBaseline = 'middle';
+  do { g.font = `bold ${px}px system-ui, sans-serif`; px -= 4; } while (g.measureText(text).width > 490 && px > 30);
+  g.fillStyle = '#ffb000'; g.fillText(text, 256, 68);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), depthTest:false }));
+  s.scale.set(.12, .03, 1); s.renderOrder = 10; s.userData.text = text;   // 3 cm tall
+  return s;
+}
+const fmt = (p) => p.dims.map(v => Math.round(v)).join(' × ') + ' mm' + (p.cut ? ' CUT' : '') + (p.solo ? ' SOLO' : '');
+function hasTwin(p) { return mirrorOn && !p.solo && Math.abs(p.pos[0]) > 1e-6; }
+function applyPose(p) {
+  const v = views.get(p.id); if (!v) return;
+  const s = p.dims.map((d, i) => d / BASE[p.kind][i]);
+  v.mesh.position.set(p.pos[0]/1000, TABLE_Y + p.pos[1]/1000, p.pos[2]/1000);
+  v.mesh.quaternion.set(...p.quat); v.mesh.scale.set(...s);
+  v.mesh.updateMatrix(); v.mesh.updateMatrixWorld(true);
+  v.twin.visible = hasTwin(p);
+  if (v.twin.visible) { v.twin.matrix.copy(new THREE.Matrix4().makeScale(-1, 1, 1).multiply(v.mesh.matrix)); v.twin.matrixWorldNeedsUpdate = true; }
+  v.label.visible = (p.id === focusId);
+  v.label.position.set(v.mesh.position.x, v.mesh.position.y + p.dims[1]/2000 + .025, v.mesh.position.z);
+}
+function makeView(p) {
+  const mat = new THREE.MeshStandardMaterial({ color: p.cut ? CUT_COL : ADD_COL, roughness:.85, transparent: p.cut, opacity: p.cut ? .55 : 1 });
+  const mesh = new THREE.Mesh(unitGeo(p.kind), mat); mesh.userData.partId = p.id; mesh.matrixAutoUpdate = false;
+  const twin = new THREE.Mesh(mesh.geometry, mat); twin.userData.partId = p.id; twin.matrixAutoUpdate = false;
+  const label = labelSprite(fmt(p));
+  group.add(mesh, twin, label); views.set(p.id, { mesh, twin, label }); applyPose(p);
+}
+function dropView(id) { const v = views.get(id); if (!v) return; group.remove(v.mesh, v.twin, v.label); views.delete(id); }
+function rebuildAll() { for (const id of [...views.keys()]) dropView(id); for (const p of parts) makeView(p); plane.visible = mirrorOn; refreshButtons(); }
+function refreshView(p) { dropView(p.id); makeView(p); }
+const partById = (id) => parts.find(p => p.id === id);
+
+/* ---------- settle on release (owner's watchlist 1 and 2; Room Zero v2's floor, carried) ----------
+   Position to the current snap step (1/5/10 mm, never finer than whole mm), heading and tilt to
+   whole degrees, then: a part whose underside ends within 2 mm of the table top, or below it,
+   sits exactly on it. Tremor in the last frames cannot survive this, and what the eye sees is
+   what Manifold and the STL receive. */
+function snapV(v) { const s = STEPS[stepIdx]; return Math.round(v / s) * s; }
+function quantQuat(q) {
+  const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...q), 'ZYX');
+  const d = (a) => THREE.MathUtils.degToRad(Math.round(THREE.MathUtils.radToDeg(a)));
+  const out = new THREE.Quaternion().setFromEuler(new THREE.Euler(d(e.x), d(e.y), d(e.z), 'ZYX'));
+  return [out.x, out.y, out.z, out.w];
+}
+function halfHeight(p) {   // exact half-height of the posed shape above its centre, mm
+  const s = solidOf({ ...p, pos:[0,0,0] }); const bb = s.boundingBox(); return -bb.min[1];
+}
+function seatOnPlane(p) { if (mirrorOn && !p.solo && Math.abs(p.pos[0]) < p.dims[0]/2) p.pos[0] = 0; }
+function settle(p) {
+  p.pos = p.pos.map(snapV); p.quat = quantQuat(p.quat); seatOnPlane(p);
+  const hh = halfHeight(p), gap = p.pos[1] - hh;
+  if (gap < 2) p.pos[1] = Math.round(hh * 1000) / 1000;   // rest on the table, no micro-gap
+}
+
+/* ---------- part operations (all undoable) ---------- */
+function addPart(kind, pos = [0, BASE[kind][1]/2, 0], opts = {}) {
+  const p = { id: nextId++, kind, dims: (opts.dims || BASE[kind]).slice(), pos: pos.slice(),
+              quat: opts.quat || [0,0,0,1], cut: !!(opts.cut ?? cutDesk), solo: !!opts.solo };
+  settle(p); focusId = p.id; parts.push(p); makeView(p); commit(); say(`Placed ${kind} ${fmt(p)}`); return p.id;
+}
+function setPose(id, pos, quat) { const p = partById(id); if (!p) return; focusId = id; p.pos = pos.slice(); if (quat) p.quat = quat.slice(); settle(p); applyPose(p); commit(); }
+function setDims(id, dims) { const p = partById(id); if (!p) return; focusId = id; p.dims = dims.map(d => Math.max(STEPS[stepIdx], snapV(d))); settle(p); refreshView(p); commit(); }
+function toggleCut(id) { const p = partById(id); if (!p) return; p.cut = !p.cut; refreshView(p); commit(); say(p.cut ? 'Part is now a CUT.' : 'Part adds again.'); }
+function toggleSolo(id) { const p = partById(id); if (!p) return; p.solo = !p.solo; refreshView(p); commit(); say(p.solo ? 'SOLO: this part is not mirrored.' : 'Part mirrors again.'); }
+function delPart(id) { const i = parts.findIndex(p => p.id === id); if (i < 0) return; parts.splice(i, 1); dropView(id); commit(); say('Deleted.'); }
+function setMirror(on) { mirrorOn = on; for (const p of parts) applyPose(p); plane.visible = on; pendingSTL = null; clearFloaters(); autoSave(); refreshButtons(); say(on ? 'MIRROR ON' : 'MIRROR OFF'); }
+
+/* ---------- export: Manifold, union adds, subtract cuts, pieces check ---------- */
+function solidOf(p) {
+  const [W, H, D] = p.dims; let m;
+  switch (p.kind) {
+    case 'sphere':   m = Manifold.sphere(.5, 64).scale([W, H, D]); break;
+    case 'box':      m = Manifold.cube([W, H, D], true); break;
+    case 'cylinder': m = Manifold.cylinder(1, .5, .5, 64, true).rotate([-90,0,0]).scale([W, H, D]); break;
+    case 'cone':     m = Manifold.cylinder(1, .5, 0, 64, true).rotate([-90,0,0]).scale([W, H, D]); break;
+    case 'capsule': { // radius 15, straight 30, total 60 (as three's CapsuleGeometry)
+      const cap = Manifold.hull([Manifold.sphere(15, 48).translate([0, 15, 0]), Manifold.sphere(15, 48).translate([0, -15, 0])]);
+      m = cap.scale([W/30, H/60, D/30]); break; }
+  }
+  // Manifold rotates X then Y then Z, which is three's Euler order 'ZYX'
+  const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...p.quat), 'ZYX');
+  return m.rotate([e.x, e.y, e.z].map(THREE.MathUtils.radToDeg)).translate(p.pos);
+}
+function buildSolid() {
+  const adds = [], cuts = [];
+  for (const p of parts) { const m = solidOf(p), list = p.cut ? cuts : adds; list.push(m); if (hasTwin(p)) list.push(m.mirror([1,0,0])); }
+  if (!adds.length) return null;
+  let s = Manifold.union(adds); if (cuts.length) s = s.subtract(Manifold.union(cuts));
+  return s;
+}
+function stlBytes(m) {   // binary STL: Y-up mm -> Z-up mm (x, -z, y), base dropped to z = 0
+  const g = m.getMesh(), n = g.numTri, y0 = m.boundingBox().min[1];
+  const buf = new ArrayBuffer(84 + n*50), dv = new DataView(buf); dv.setUint32(80, n, true);
+  const P = (v) => { const o = v*g.numProp; return [g.vertProperties[o], -g.vertProperties[o+2], g.vertProperties[o+1] - y0]; };
+  for (let t = 0; t < n; t++) {
+    const a = P(g.triVerts[t*3]), b = P(g.triVerts[t*3+1]), c = P(g.triVerts[t*3+2]);
+    const u = [b[0]-a[0], b[1]-a[1], b[2]-a[2]], w = [c[0]-a[0], c[1]-a[1], c[2]-a[2]];
+    const nx = u[1]*w[2]-u[2]*w[1], ny = u[2]*w[0]-u[0]*w[2], nz = u[0]*w[1]-u[1]*w[0];
+    const L = Math.hypot(nx, ny, nz) || 1, off = 84 + t*50;
+    [nx/L, ny/L, nz/L, ...a, ...b, ...c].forEach((f, i) => dv.setFloat32(off + i*4, f, true));
+  }
+  return new Uint8Array(buf);
+}
+/* P2: which parts float. The largest piece by volume is the body; an adding part (or its mirror
+   twin) that shares no volume with the body is a floater. Point or line contact counts as
+   floating, because it exports as a separate piece. Cut parts are never floaters. */
+function findFloaters(s) {
+  const pcs = s.decompose(); if (pcs.length < 2) return [];
+  let body = pcs[0]; for (const q of pcs) if (q.volume() > body.volume()) body = q;
+  const out = [];
+  for (const p of parts) {
+    if (p.cut) continue;
+    const m = solidOf(p), list = [['part', m]]; if (hasTwin(p)) list.push(['twin', m.mirror([1,0,0])]);
+    for (const [side, mm] of list) if (body.intersect(mm).volume() < 1e-3) out.push({ id: p.id, kind: p.kind, side });
+  }
+  return out;
+}
+let floaterIds = new Set();
+function clearFloaters() {
+  for (const id of floaterIds) { const v = views.get(id), p = partById(id); if (v && p) v.mesh.material.color.setHex(p.cut ? CUT_COL : ADD_COL); }
+  floaterIds = new Set();
+}
+function showFloaters(list) {
+  clearFloaters(); if (!SHOW_FLOATERS) return;
+  for (const f of list) { const v = views.get(f.id); if (v) { v.mesh.material.color.setHex(0xff3030); floaterIds.add(f.id); } }
+}
+/* P3: bed fit. The AD5X bed is 220 x 220 x 220 mm. Reports the whole print being too big, any
+   part of it hanging off the plate edge as placed, and anything below the table top. */
+function bedCheck(bb) {
+  const w = [], over = (a, b) => +(a - b).toFixed(1);
+  const W = bb.max[0] - bb.min[0], D = bb.max[2] - bb.min[2], H = bb.max[1] - Math.min(0, bb.min[1]);
+  if (W > BED_MM || D > BED_MM || H > BED_MM) w.push(`TOO BIG FOR THE BED: ${W.toFixed(1)} × ${D.toFixed(1)} × ${H.toFixed(1)} mm (bed ${BED_MM} cube)`);
+  const off = Math.max(bb.max[0] - BED_MM/2, -BED_MM/2 - bb.min[0], bb.max[2] - BED_MM/2, -BED_MM/2 - bb.min[2]);
+  if (off > 0.05 && !(W > BED_MM || D > BED_MM)) w.push(`OFF THE PLATE EDGE by ${over(off, 0)} mm as placed (it fits if moved)`);
+  else if (off > 0.05) w.push(`OFF THE PLATE EDGE by ${over(off, 0)} mm`);
+  if (bb.min[1] < -0.05) w.push(`BELOW THE TABLE TOP by ${over(-bb.min[1], 0)} mm (the file drops it to the bed)`);
+  return w;
+}
+function exportReport() {
+  const s = buildSolid();
+  if (!s || s.isEmpty()) return { ok:false, msg:'Nothing to export: place a part first.' };
+  const pieces = s.decompose().length, bb = s.boundingBox();
+  const ext = [0, 2, 1].map(i => +(bb.max[i] - bb.min[i]).toFixed(2));   // W x D x H
+  const floaters = pieces > 1 ? findFloaters(s) : [], bed = BED_CHECK ? bedCheck(bb) : [];
+  return { ok:true, pieces, floaters, bed, volume_cm3: +(s.volume()/1000).toFixed(3), extents_WDH: ext, tris: s.numTri(), genus: s.genus(), bytes: stlBytes(s) };
+}
+function saveFile(bytes, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type:'model/stl' }));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+/* Watchlist 3: no page can command how the browser downloads, so a save is never fired from
+   inside the headset. EXPORT in the room builds the solid, checks it, and holds the file;
+   SAVE STL in the browser view writes it. Settled from evidence at the first stand. */
+function doExport(ctrl) {
+  const r = exportReport();
+  if (!r.ok) { say(r.msg); tick(ctrl); return r; }
+  window.__lastSTL = r.bytes; pendingSTL = r.bytes;
+  showFloaters(r.floaters);
+  const fl = r.floaters.length ? ` (shown RED: ${r.floaters.map(f => f.kind + (f.side === 'twin' ? ' mirror' : '')).join(', ')})` : '';
+  let head = `${r.extents_WDH.join(' × ')} mm, ${r.volume_cm3} cm³, ` + (r.pieces === 1 ? 'ONE PIECE ✔' : `WARNING: ${r.pieces} PIECES, something floats${fl}`);
+  if (r.bed.length) head += '\nBED: ' + r.bed.join('; ');
+  if (renderer.xr.isPresenting) say(`EXPORT READY (held): ${head}\nSave it from the browser view: SAVE STL.`);
+  else { saveFile(r.bytes, 'forge-room.stl'); pendingSTL = null; say(`SAVED forge-room.stl\n${head}`); }
+  tick(ctrl, (r.pieces === 1 && !r.bed.length) ? .5 : 1); refreshButtons(); return r;
+}
+
+/* ---------- desktop controls ---------- */
+document.querySelectorAll('[data-add]').forEach(b => b.onclick = () => addPart(b.dataset.add));
+document.getElementById('bMirror').onclick = () => setMirror(!mirrorOn);
+document.getElementById('bCut').onclick = () => { cutDesk = !cutDesk; refreshButtons(); say(cutDesk ? 'CUT MODE ON: new parts cut.' : 'CUT MODE OFF: new parts add.'); };
+document.getElementById('bUndo').onclick = () => undo();
+document.getElementById('bRedo').onclick = () => redo();
+document.getElementById('bBed').onclick = () => { bedBox.visible = !bedBox.visible; refreshButtons(); say(bedBox.visible ? 'BED ON: 220 × 220 × 220 mm.' : 'BED OFF.'); };
+document.getElementById('bRef').onclick = () => setDummy(!dummy.visible);
+document.getElementById('bExport').onclick = () => {
+  if (pendingSTL) { saveFile(pendingSTL, 'forge-room.stl'); pendingSTL = null; refreshButtons(); say('SAVED forge-room.stl (the file built in the room).'); }
+  else doExport();
+};
+document.getElementById('bSnap').onclick = () => {   // I4: local PNG of the view, nothing uploads
+  renderer.render(scene, camera);
+  renderer.domElement.toBlob((blob) => {
+    if (!blob) { say('Snapshot failed in this browser.'); return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'forge-room-view.png'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000); say('Snapshot saved: forge-room-view.png');
+  }, 'image/png');
+};
+function refreshButtons() {
+  const set = (id, text, cls) => { const b = document.getElementById(id); b.textContent = text; b.className = cls; };
+  set('bMirror', mirrorOn ? 'MIRROR ON' : 'MIRROR OFF', mirrorOn ? '' : 'off');
+  set('bCut', cutDesk ? 'CUT MODE ON' : 'CUT MODE OFF', cutDesk ? 'cut' : 'off');
+  set('bBed', bedBox.visible ? 'BED ON' : 'BED OFF', bedBox.visible ? '' : 'off');
+  set('bRef', dummy.visible ? 'DUMMY ON' : 'DUMMY OFF', dummy.visible ? '' : 'off');
+  set('bExport', pendingSTL ? 'SAVE STL' : 'EXPORT STL', pendingSTL ? 'ready' : '');
+  drawPanel();
+}
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), dragPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0), hit = new THREE.Vector3();
+let mouseDrag = null;
+const pickables = () => [...views.values()].flatMap(v => v.twin.visible ? [v.mesh, v.twin] : [v.mesh]);
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  ndc.set(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1); ray.setFromCamera(ndc, camera);
+  const h = ray.intersectObjects(pickables(), false)[0]; if (!h) return;
+  const p = partById(h.object.userData.partId);
+  mouseDrag = { p, twinSide: h.object === views.get(p.id).twin }; controls.enabled = false; focusId = p.id;
+  dragPlane.constant = -(TABLE_Y + p.pos[1]/1000);
+});
+addEventListener('pointermove', (e) => {
+  if (!mouseDrag) return;
+  ndc.set(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1); ray.setFromCamera(ndc, camera);
+  if (ray.ray.intersectPlane(dragPlane, hit)) { const p = mouseDrag.p; p.pos[0] = (mouseDrag.twinSide ? -1 : 1) * hit.x * 1000; p.pos[2] = hit.z * 1000; applyPose(p); }
+});
+addEventListener('pointerup', () => { if (!mouseDrag) return; const p = mouseDrag.p; mouseDrag = null; controls.enabled = true; setPose(p.id, p.pos); say(fmt(p)); });
+renderer.domElement.addEventListener('wheel', (e) => {
+  if (!e.shiftKey) return; ndc.set(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1); ray.setFromCamera(ndc, camera);
+  const h = ray.intersectObjects(pickables(), false)[0]; if (!h) return; e.preventDefault();
+  const p = partById(h.object.userData.partId), f = e.deltaY < 0 ? 1.1 : 1/1.1; setDims(p.id, p.dims.map(d => d*f)); say(fmt(p));
+}, { passive:false });
+
+/* ---------- VR: controllers, tools, grab, two-hand scale ---------- */
+const ctrls = [0, 1].map(i => {
+  const c = renderer.xr.getController(i);
+  c.addEventListener('connected', (e) => { c.userData.src = e.data; c.userData.hand = e.data.handedness; });
+  c.addEventListener('disconnected', () => { c.userData.src = null; });
+  c.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0,0,-2)]),
+    new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:.5 })));
+  c.userData.prev = {}; rig.add(c); return c;
+});
+const tmpM = new THREE.Matrix4();
+function aim(c) { tmpM.identity().extractRotation(c.matrixWorld); ray.ray.origin.setFromMatrixPosition(c.matrixWorld); ray.ray.direction.set(0,0,-1).applyMatrix4(tmpM); }
+function partUnder(c) { aim(c); const h = ray.intersectObjects(pickables(), false)[0]; return h ? { p: partById(h.object.userData.partId), twin: h.object === views.get(h.object.userData.partId).twin } : null; }
+let held = null, twoHand = null;
+const dist = () => ctrls[0].position.distanceTo(ctrls[1].position);
+function grabStart(c) {
+  if (held && held.ctrl !== c) {
+    const u = partUnder(c);
+    if (u && u.p === held.p) { twoHand = { d0: dist(), dims0: held.p.dims.slice(), other: c }; tick(c); say('Both hands: scaling.'); }
+    return;
+  }
+  const u = partUnder(c); if (!u) return;
+  const v = views.get(u.p.id), obj = u.twin ? v.twin : v.mesh;
+  focusId = u.p.id;
+  held = { p: u.p, ctrl: c, twin: u.twin, offset: new THREE.Matrix4().copy(c.matrixWorld).invert().multiply(obj.matrixWorld) };
+  v.mesh.material.emissive.setHex(0x663311); tick(c); say('Holding ' + fmt(u.p));
+}
+function grabEnd(c) {
+  if (twoHand && twoHand.other === c) { const p = held.p; twoHand = null; setDims(p.id, p.dims); tick(c); say(fmt(p)); return; }
+  if (!held || held.ctrl !== c) return;
+  const p = held.p; views.get(p.id).mesh.material.emissive.setHex(0); twoHand = null; held = null;
+  setPose(p.id, p.pos, p.quat); tick(c, .3); say('Set: ' + fmt(p));
+}
+function followHeld() {
+  if (!held) return;
+  const p = held.p, world = new THREE.Matrix4().copy(held.ctrl.matrixWorld).multiply(held.offset);
+  if (held.twin) world.premultiply(new THREE.Matrix4().makeScale(-1, 1, 1));   // the twin drags its source, mirrored
+  const pos = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(); world.decompose(pos, q, s);
+  p.pos = [pos.x*1000, (pos.y - TABLE_Y)*1000, pos.z*1000];
+  if (!held.twin) p.quat = [q.x, q.y, q.z, q.w];
+  if (twoHand) { const f = dist() / twoHand.d0; p.dims = twoHand.dims0.map(d => d*f); }
+  const v = views.get(p.id), text = fmt(p);
+  if (v.label.userData.text !== text) { group.remove(v.label); v.label.material.map.dispose(); v.label.material.dispose(); v.label = labelSprite(text); group.add(v.label); }
+  applyPose(p);
+}
+function trigger(c) {
+  if (panel.visible && panelPress(c)) return;
+  const tool = TOOLS[toolIdx], u = partUnder(c);
+  if (KIND_OF[tool]) {
+    aim(c); const at = ray.ray.origin.clone().add(ray.ray.direction.clone().multiplyScalar(.25)), kind = KIND_OF[tool];
+    addPart(kind, [at.x*1000, Math.max(BASE[kind][1]/2, (at.y - TABLE_Y)*1000), at.z*1000]); tick(c);
+  } else if (!u) { say('Point at a part.'); tick(c); }
+  else if (tool === 'CUT') { toggleCut(u.p.id); tick(c); }
+  else if (tool === 'SOLO') { toggleSolo(u.p.id); tick(c); }
+  else if (tool === 'DELETE') { delPart(u.p.id); tick(c); }
+}
+ctrls.forEach(c => {
+  c.addEventListener('selectstart', () => trigger(c));
+  c.addEventListener('squeezestart', () => grabStart(c));
+  c.addEventListener('squeezeend', () => grabEnd(c));
+});
+function pollPads() {
+  for (const c of ctrls) {
+    const gp = c.userData.src && c.userData.src.gamepad; if (!gp) continue;
+    const pr = c.userData.prev, ax = gp.axes[2] || 0, ay = gp.axes[3] || 0;
+    const edge = (k, on) => { const was = pr[k]; pr[k] = on; return on && !was; };
+    if (edge('r', ax > .7))  { toolIdx = (toolIdx + 1) % TOOLS.length; tick(c); say('TOOL: ' + TOOLS[toolIdx]); drawPanel(); }
+    if (edge('l', ax < -.7)) { toolIdx = (toolIdx + TOOLS.length - 1) % TOOLS.length; tick(c); say('TOOL: ' + TOOLS[toolIdx]); drawPanel(); }
+    if (edge('u', ay < -.7)) { stepIdx = Math.min(2, stepIdx + 1); tick(c); say('SNAP ' + STEPS[stepIdx] + ' mm'); drawPanel(); }
+    if (edge('d', ay > .7))  { stepIdx = Math.max(0, stepIdx - 1); tick(c); say('SNAP ' + STEPS[stepIdx] + ' mm'); drawPanel(); }
+    if (edge('a', gp.buttons[4] && gp.buttons[4].pressed)) undo(c);   // A or X
+    if (edge('b', gp.buttons[5] && gp.buttons[5].pressed)) redo(c);   // B or Y
+    if (c.userData.hand === 'left' && edge('s', gp.buttons[3] && gp.buttons[3].pressed)) { panelPinned = !panelPinned; tick(c); say(panelPinned ? 'Panel pinned.' : 'Panel unpinned.'); }
+  }
+}
+
+/* ---------- wrist panel: MIRROR, BED, EXPORT, REFERENCE (6 cm buttons) ---------- */
+const BTN = ['MIRROR', 'BED', 'EXPORT', 'REFERENCE'];
+const pc = document.createElement('canvas'); pc.width = 1024; pc.height = 1024;
+const ptex = new THREE.CanvasTexture(pc);
+const panel = new THREE.Mesh(new THREE.PlaneGeometry(.14, .14), new THREE.MeshBasicMaterial({ map:ptex, transparent:true, depthTest:false }));
+panel.renderOrder = 20; panel.visible = false; scene.add(panel);
+let panelPinned = false;
+function drawPanel() {
+  const g = pc.getContext('2d'); g.clearRect(0, 0, 1024, 1024);
+  g.fillStyle = 'rgba(12,13,15,.92)'; g.fillRect(0, 0, 1024, 1024);
+  BTN.forEach((name, i) => {
+    const x = (i % 2) * 512 + 24, y = Math.floor(i / 2) * 400 + 24;
+    const lit = (name === 'MIRROR' && mirrorOn) || (name === 'BED' && bedBox.visible) || name === 'EXPORT' || (name === 'REFERENCE' && dummy.visible);
+    g.fillStyle = lit ? (name === 'EXPORT' && pendingSTL ? '#7dff9a' : '#ffb000') : '#4a4f57'; g.fillRect(x, y, 464, 352);
+    g.fillStyle = lit ? '#111' : '#eee'; g.font = 'bold 76px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(name === 'REFERENCE' ? 'REF' : name, x + 232, y + 150);
+    g.font = 'bold 52px system-ui, sans-serif';
+    const sub = name === 'MIRROR' ? (mirrorOn ? 'ON' : 'OFF') : name === 'BED' ? (bedBox.visible ? 'ON' : 'OFF')
+      : name === 'EXPORT' ? (pendingSTL ? 'HELD' : 'STL') : (dummy.visible ? 'DUMMY ON' : 'DUMMY OFF');
+    g.fillText(sub, x + 232, y + 250);
+  });
+  g.fillStyle = '#ffb000'; g.font = 'bold 64px system-ui, sans-serif'; g.textAlign = 'center';
+  g.fillText(`${TOOLS[toolIdx]}  ·  SNAP ${STEPS[stepIdx]} mm`, 512, 900);
+  ptex.needsUpdate = true;
+}
+const up = new THREE.Vector3();
+function placePanel() {   // left hand: shows when the palm turns up, or when pinned
+  const left = ctrls.find(c => c.userData.hand === 'left'); if (!left) { panel.visible = false; return; }
+  up.set(1, 0, 0).applyQuaternion(left.getWorldQuaternion(new THREE.Quaternion()));
+  panel.visible = panelPinned || up.y > .6; if (!panel.visible) return;
+  panel.position.copy(left.getWorldPosition(new THREE.Vector3())).add(new THREE.Vector3(0, .12, 0));
+  panel.lookAt(renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()));
+}
+function panelPress(c) {
+  if (c.userData.hand === 'left') return false; aim(c);
+  const h = ray.intersectObject(panel, false)[0]; if (!h || !h.uv) return false;
+  const col = h.uv.x < .5 ? 0 : 1, row = h.uv.y > .6 ? 0 : h.uv.y > .2 ? 1 : -1; if (row < 0) return true;
+  const name = BTN[row * 2 + col];
+  if (name === 'MIRROR') setMirror(!mirrorOn);
+  if (name === 'BED') { bedBox.visible = !bedBox.visible; refreshButtons(); say(bedBox.visible ? 'BED ON: 220 × 220 × 220 mm.' : 'BED OFF.'); }
+  if (name === 'EXPORT') doExport(c);
+  if (name === 'REFERENCE') setDummy(!dummy.visible);
+  tick(c); return true;
+}
+
+/* ---------- loop ---------- */
+renderer.setAnimationLoop(() => {
+  for (const [id, v] of views) v.label.visible = (id === focusId);
+  if (!renderer.xr.isPresenting) { controls.update(); bar3d.visible = false; }
+  else { pollPads(); followHeld(); placePanel(); placeBar(); }
+  renderer.render(scene, camera);
+});
+addEventListener('resize', () => { camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+/* ---------- test hooks (headless proof; harmless in the headset) ---------- */
+window.forge = { addPart, setPose, setDims, toggleCut, toggleSolo, delPart, setMirror, undo, redo, exportReport, setDummy,
+  get parts() { return JSON.parse(JSON.stringify(parts)); }, setStep: (i) => { stepIdx = i; }, depth: () => [undoStack.length, redoStack.length],
+  dummyBox: () => { dummy.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(dummy); return { min:b.min.toArray(), max:b.max.toArray() }; },
+  ghostBox: () => { ghost.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(ghost); return { min:b.min.toArray(), max:b.max.toArray() }; },
+  get status() { return lastMsg; }, tableY: TABLE_Y,
+  audioUsed: () => typeof window.__audio !== 'undefined',
+  floaterIds: () => [...floaterIds], partColor: (id) => views.get(id) ? views.get(id).mesh.material.color.getHex() : null,
+  savedRaw: () => { try { return localStorage.getItem(SAVE_KEY); } catch (e) { return 'STORAGE REFUSED'; } } };
+refreshButtons();
+{ /* P1 restore: the last saved work comes back; one UNDO returns to an empty table */
+  const sv = AUTOSAVE ? readSave() : null; let n = 0;
+  if (sv) { try { n = JSON.parse(sv.state).parts.length; } catch (e) { n = 0; } }
+  if (n > 0) {
+    undoStack.push(lastState); mirrorOn = sv.mirrorOn !== false; stepIdx = Number.isInteger(sv.stepIdx) ? sv.stepIdx : stepIdx;
+    restore(sv.state);
+    say(`RESTORED your last work: ${n} part${n === 1 ? '' : 's'}. UNDO clears the table.`);
+  } else say('Kernel ready. Place a part.');
+}
+window.__ready = true;
+</script>
+</body>
+</html>
