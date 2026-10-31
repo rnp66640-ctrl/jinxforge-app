@@ -73,3 +73,37 @@ nothing here spends money, sends outward, or changes a rule).
   corrections from Round 1 (58,420 B). Headless boot: kernel ready,
   TABLE buttons aboard, zero errors. NOT proven: everything inside
   a headset — his next stand on fresh batteries is the grade.
+
+## 2026-10-31 — Round 3 (second stand; the workshop opens)
+- SECOND STAND (owner, 11:24 ET, rulings given in Janx's chat):
+  grabbing and moving FELT GOOD. The wrist panel failed again (did
+  not show on the turn; faced wrong when it did) — his order: move
+  it to a WALL PANEL on his LEFT. Mirror OFF by default. Resize was
+  undiscoverable. "The tools are a go."
+- BUILT (Janx): Workshop v1 on the CP2 file — wrist panel removed
+  entire (palm test, teach, pin gone); fixed wall board 1.2 m left
+  at 1.25 m, 44 x 66 cm, 8 big buttons (MIRROR, BED, EXPORT, REF,
+  UNDO, REDO, RECALL, TOOLS HOME) + readout; press by ray or by
+  poke (once per approach); dummy stepped back 35 cm. Mirror starts
+  OFF; save format v4 keeps his last setting; older saves restore
+  OFF (their ON was the old default). Resize: second hand's grip
+  ANYWHERE starts two-hand scale (was: ray had to hit the part);
+  one-hand way added — hold a part, stick up/down steps 5%, snaps
+  on release, one undo step. TOOL BENCH on his right, top riding
+  the table height: 5 stock tools (carry to the plate, let go,
+  becomes a part; bench restocks), CHISEL (cut toggle), PIN (solo),
+  HAMMER (delete; undo restores). Dropped tools fall 0.7 s then
+  glide home; within 12 cm they snap home. RECALL (stick click or
+  wall button) flies the last tool to the hand. Tools are furniture,
+  never parts, never exported. WORKSHOP flag removes the bench.
+- VERIFIED + PUBLISHED (Jinx): base, diff and tests byte-exact;
+  Jinx's own patch application reproduced her claimed result
+  exactly (73,233 B, SHA-256 095778f8...6871) — second witness to
+  the watch's reproduction. Headless boot: kernel ready, MIRROR OFF
+  showing, zero errors. Her 44 tests + trimesh STL check stand as
+  her runs. One slip named to her: the check word ANVIL does not
+  appear in the published file (TRESTLE did, in hers).
+  NOT proven: hand-joint frames, poke distance feel, recall grip
+  angle (one constant, CANON). His next stand grades it.
+- NEXT (Janx, after that stand): the sculpt bench — clay
+  add/carve/smooth, the day-or-two piece.
