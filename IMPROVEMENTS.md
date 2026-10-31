@@ -30,3 +30,21 @@ nothing here spends money, sends outward, or changes a rule).
   session must not eject the user — v1 keeps export on the browser
   view; the in-session export path is a named rung-build problem,
   to be settled at Richard's first stand and designed from evidence.
+
+## 2026-10-31 — Round 1 (owner at the table)
+- DELIVERED overnight (Janx): Forge Room v2 (rungs on Room Zero v2's
+  base, dummy aboard) and v3 (P1 auto-save, P2 floaters red on export,
+  P3 bed-fit warnings) — both desk-verified byte-exact by the watch.
+- OWNER RULING: MERGE THE ROOMS — one room only. Executed at Jinx's
+  desk: Janx's v3 (which already carried Room Zero v2's laws verbatim)
+  is the base; it now serves at the Room Zero address as THE FORGE
+  ROOM. Room Zero v2 and Janx's untouched v3 are archived under
+  docs/vr/archive/. Headless boot verified: kernel ready, full
+  toolbar, zero errors. Headset behaviour still awaits his stand.
+- OWNER RULING (sound): UI sound effects are IN; an AI talking in the
+  room stays OUT (no Web Speech — voice is external, phone/earbud).
+  Jinx's merge pass added a small WebAudio layer (sfx): grab tick,
+  two-hand tick, settle thunk, export success pair / warning low /
+  failure low. SFX flag mutes it. The haptic tick rides as built.
+- STILL OPEN for the owner: mirror-after-restore behaviour,
+  vidIQ pack word, haptics keep-or-cut (riding as built meanwhile).
