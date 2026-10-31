@@ -48,3 +48,28 @@ nothing here spends money, sends outward, or changes a rule).
   failure low. SFX flag mutes it. The haptic tick rides as built.
 - STILL OPEN for the owner: mirror-after-restore behaviour,
   vidIQ pack word, haptics keep-or-cut (riding as built meanwhile).
+
+## 2026-10-31 — Round 2 (first stand graded by the owner's hands)
+- FIRST STAND (owner, morning): the room PROVED itself (dummy, ghost,
+  plate all seen; "super duper cool") — the CONTROL PACKAGE failed:
+  wrist panel read his palm backwards (showed palm-down, hid palm-up),
+  glitched at the old test's edge, hung off his left unfaced; table
+  stood too tall for his chair. Session cut short by dead controller
+  batteries. His orders: refine the controls; start a hand-free path.
+- BUILT (Janx, Q29): Control Package v2 as a diff on the file of
+  record — head-relative palm test (hand-to-head in the hand's own
+  frame, axis -X default per his hand's report) with a teach gesture
+  (hold left stick click 1 s = whatever pose he shows becomes the
+  panel pose, saved); deadband 0.80/120 ms show, 0.50/250 ms hide;
+  panel anchored at the fist, facing the eye, third row UNDO/TOOL;
+  adjustable table (amber handle pull or desktop buttons, 0.45-1.10 m
+  in 1 cm steps, remembered, default 0.85; parts ride the table);
+  hand-tracking path beside the controllers (pinch = trigger,
+  pinch-hold = grab, open left palm to face = panel; HANDS flag
+  disables; controllers stay primary).
+- VERIFIED + PUBLISHED (Jinx): diff and tests downloaded byte-exact;
+  base hash and patched hash reproduced EXACTLY (58,295 B,
+  1e1e8189...); desk publish adds only the two stale-comment
+  corrections from Round 1 (58,420 B). Headless boot: kernel ready,
+  TABLE buttons aboard, zero errors. NOT proven: everything inside
+  a headset — his next stand on fresh batteries is the grade.
