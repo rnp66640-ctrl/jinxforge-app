@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Room Zero — JinxForge VR</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #20242a;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: #f2f0eb;
+  }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  /* Big text everywhere: Quest 3S fresnel lenses soften fine detail. */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    padding: 18px 22px 10px 22px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(10,12,14,0.72), rgba(10,12,14,0));
+    z-index: 10;
+  }
+  #hud h1 {
+    margin: 0 0 6px 0;
+    font-size: 38px; line-height: 1.1; font-weight: 800; letter-spacing: 0.5px;
+  }
+  #hud p {
+    margin: 0; max-width: 900px;
+    font-size: 22px; line-height: 1.35; font-weight: 500;
+  }
+  #hud p b { color: #ffb37a; }
+
+  #exportBtn {
+    position: fixed; left: 22px; bottom: 26px; z-index: 11;
+    font-size: 30px; font-weight: 800; letter-spacing: 0.5px;
+    padding: 20px 34px;
+    color: #1d1208; background: #ff9a3d; border: none; border-radius: 14px;
+    box-shadow: 0 6px 0 #b35f14, 0 10px 22px rgba(0,0,0,0.45);
+    cursor: pointer; touch-action: none;
+  }
+  #exportBtn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b35f14; }
+
+  #status {
+    position: fixed; right: 22px; bottom: 30px; z-index: 11;
+    font-size: 20px; font-weight: 600; color: #cfe3ff;
+    background: rgba(10,12,14,0.55); padding: 10px 16px; border-radius: 10px;
+    max-width: 46vw; text-align: right;
+  }
+</style>
+
+<!-- three.js pinned via CDN import map. No build step, no other assets. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud">
+  <h1>ROOM ZERO</h1>
+  <p>Stand in the room. Point a controller at the <b>clay block</b> and hold the
+     <b>trigger</b> (or <b>squeeze</b>) to grab it &mdash; let go to drop it.
+     Press <b>EXPORT STL</b> to save the block as a printable file.
+     On a computer: drag the block with the mouse.</p>
+</div>
+
+<button id="exportBtn">EXPORT STL</button>
+<div id="status">Block: 100 &times; 60 &times; 60 mm</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { STLExporter } from 'three/addons/exporters/STLExporter.js';
+
+/* ============================================================
+   Room Zero — minimal WebXR proof for the JinxForge VR project.
+   Scene units are METRES (true scale). STL export converts to
+   MILLIMETRES (STL units), because printers think in mm.
+   ============================================================ */
+
+const statusEl = document.getElementById('status');
+function setStatus(msg) { statusEl.textContent = msg; }
+
+/* ---------- renderer / scene / camera ---------- */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local-floor');
+document.getElementById('app').appendChild(renderer.domElement);
+document.body.appendChild(VRButton.createButton(renderer));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x2b3038); // soft neutral backdrop
+
+/* Camera rig ("dolly"): in VR the rig steps back 1.6 m so the block at
+   room centre is in front of you, not under your feet. On desktop the
+   rig sits at the origin and OrbitControls do the walking. */
+const rig = new THREE.Group();
+scene.add(rig);
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 100);
+camera.position.set(1.1, 1.5, 1.9);
+rig.add(camera);
+
+renderer.xr.addEventListener('sessionstart', () => { rig.position.set(0, 0, 1.6); });
+renderer.xr.addEventListener('sessionend',   () => { rig.position.set(0, 0, 0); });
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.1, 0);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.55;
+
+/* ---------- lights (no shadows: light on the Quest GPU) ---------- */
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x4a4136, 1.15));
+const sun = new THREE.DirectionalLight(0xfff1dd, 1.6);
+sun.position.set(2.5, 4, 1.5);
+scene.add(sun);
+
+/* ---------- the room: 4 m x 4 m floor, true measure ---------- */
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(4, 4),
+  new THREE.MeshStandardMaterial({ color: 0x565e68, roughness: 0.95, metalness: 0 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.002;
+scene.add(floor);
+
+/* Grid in real measure: fine lines every 0.1 m, strong lines every 0.5 m. */
+const gridFine = new THREE.GridHelper(4, 40, 0x8a94a2, 0x77808e);   // 0.1 m
+gridFine.material.transparent = true;
+gridFine.material.opacity = 0.28;
+gridFine.position.y = 0;
+scene.add(gridFine);
+
+const gridBold = new THREE.GridHelper(4, 8, 0xd7dee9, 0xaeb8c6);    // 0.5 m
+gridBold.material.transparent = true;
+gridBold.material.opacity = 0.65;
+gridBold.position.y = 0.0015;
+scene.add(gridBold);
+
+/* 100 mm reference cube outline, tucked in the room's corner, so the
+   eye can check the scale of everything else against a known size. */
+const refCube = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(0.1, 0.1, 0.1)),
+  new THREE.LineBasicMaterial({ color: 0xffd23d })
+);
+refCube.position.set(-1.95, 0.05, -1.95);
+scene.add(refCube);
+
+/* ---------- the clay block: 100 x 60 x 60 mm at room centre ---------- */
+const block = new THREE.Mesh(
+  new THREE.BoxGeometry(0.1, 0.06, 0.06),
+  new THREE.MeshStandardMaterial({ color: 0xc9703f, roughness: 0.9, metalness: 0 }) // warm clay
+);
+block.position.set(0, 0.03, 0); // resting on the floor
+scene.add(block);
+
+function restOnFloor(obj) {
+  /* Drop the object straight down until its lowest point touches y=0. */
+  const box = new THREE.Box3().setFromObject(obj);
+  if (isFinite(box.min.y)) obj.position.y -= box.min.y;
+}
+
+/* ---------- grabbing: VR controllers ---------- */
+const raycaster = new THREE.Raycaster();
+const tempMatrix = new THREE.Matrix4();
+let grabbedBy = null;
+
+function onGrabStart(event) {
+  const controller = event.target;
+  tempMatrix.identity().extractRotation(controller.matrixWorld);
+  raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+  raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+  if (raycaster.intersectObject(block, false).length > 0) {
+    controller.attach(block);           // block rides the hand
+    grabbedBy = controller;
+    block.material.emissive.setHex(0x663311);
+    setStatus('Holding the block — let go to drop it.');
+  }
+}
+function onGrabEnd(event) {
+  if (grabbedBy === event.target) {
+    scene.attach(block);                // back into the room, world pose kept
+    restOnFloor(block);                 // ...then settle onto the floor
+    grabbedBy = null;
+    block.material.emissive.setHex(0x000000);
+    setStatus('Block: 100 × 60 × 60 mm');
+  }
+}
+
+for (let i = 0; i < 2; i++) {
+  const controller = renderer.xr.getController(i);
+  controller.addEventListener('selectstart', onGrabStart);
+  controller.addEventListener('selectend', onGrabEnd);
+  controller.addEventListener('squeezestart', onGrabStart);
+  controller.addEventListener('squeezeend', onGrabEnd);
+  /* a short aiming ray so you can see where the hand points */
+  const ray = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -3)]),
+    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+  );
+  controller.add(ray);
+  rig.add(controller); // controllers live with the camera rig
+}
+
+/* ---------- grabbing: desktop mouse (drag on a level plane) ---------- */
+const mouse = new THREE.Vector2();
+const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const hitPoint = new THREE.Vector3();
+let mouseDragging = false;
+
+function pointerNDC(e) {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+}
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  pointerNDC(e);
+  raycaster.setFromCamera(mouse, camera);
+  if (raycaster.intersectObject(block, false).length > 0) {
+    mouseDragging = true;
+    controls.enabled = false;
+    dragPlane.constant = -block.position.y; // plane at the block's height
+    block.material.emissive.setHex(0x663311);
+    setStatus('Dragging — release to drop.');
+  }
+});
+window.addEventListener('pointermove', (e) => {
+  if (!mouseDragging) return;
+  pointerNDC(e);
+  raycaster.setFromCamera(mouse, camera);
+  if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
+    block.position.x = THREE.MathUtils.clamp(hitPoint.x, -1.9, 1.9);
+    block.position.z = THREE.MathUtils.clamp(hitPoint.z, -1.9, 1.9);
+  }
+});
+window.addEventListener('pointerup', () => {
+  if (!mouseDragging) return;
+  mouseDragging = false;
+  controls.enabled = true;
+  restOnFloor(block);
+  block.material.emissive.setHex(0x000000);
+  setStatus('Block: 100 × 60 × 60 mm');
+});
+
+/* ---------- EXPORT STL (metres in the scene -> millimetres in the file) ---------- */
+function exportSTL() {
+  block.updateWorldMatrix(true, false);
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scl = new THREE.Vector3();
+  block.matrixWorld.decompose(pos, quat, scl);
+
+  const geo = block.geometry.clone();
+  const toMM = new THREE.Matrix4().compose(
+    pos.clone().multiplyScalar(1000),
+    quat,
+    scl.clone().multiplyScalar(1000)
+  );
+  geo.applyMatrix4(toMM);
+
+  const exporter = new STLExporter();
+  const data = exporter.parse(new THREE.Mesh(geo), { binary: true });
+  const blob = new Blob([data], { type: 'model/stl' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'room-zero-block.stl';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  setStatus('Saved room-zero-block.stl — 100 × 60 × 60 mm, ready to slice.');
+}
+document.getElementById('exportBtn').addEventListener('click', exportSTL);
+
+/* ---------- main loop / resize ---------- */
+renderer.setAnimationLoop(() => {
+  if (!renderer.xr.isPresenting) controls.update();
+  renderer.render(scene, camera);
+});
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
