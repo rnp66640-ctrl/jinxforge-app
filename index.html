@@ -1,0 +1,2830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>JinxForge 3D Coloring Book</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: rgba(22, 26, 34, 0.96);
+    --panel-solid: #161a22;
+    --border: rgba(255, 255, 255, 0.16);
+    --text: #f3f5f8;
+    --muted: #98a2b3;
+    --accent: #3b82f6;
+    --accent-glow: rgba(59, 130, 246, 0.35);
+    --move-amber: #f59e0b;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    touch-action: none;
+  }
+
+  #viewport {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    touch-action: none;
+  }
+
+  /* Top HUD Bar */
+  .top-bar {
+    position: fixed;
+    top: env(safe-area-inset-top, 10px);
+    left: 10px;
+    right: 10px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+  }
+
+  .top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .top-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: auto;
+    flex-shrink: 0;
+  }
+
+  .pill-btn {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 11px;
+    padding: 8px 11px;
+    font-size: 13px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    transition: transform 0.08s ease, border-color 0.15s ease, background 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .pill-btn:active {
+    transform: scale(0.96);
+  }
+
+  .pill-btn.primary {
+    background: var(--accent);
+    border-color: #60a5fa;
+    color: #fff;
+  }
+
+  .pill-btn:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .model-badge {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+    color: var(--muted);
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    backdrop-filter: blur(10px);
+    pointer-events: auto;
+    align-self: flex-start;
+  }
+
+  /* Left-Side Camera Gizmo Ball + Vertical Zoom Scale Slider */
+  .left-nav-rail {
+    position: fixed;
+    left: 10px;
+    top: 108px;
+    z-index: 11;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    pointer-events: none;
+  }
+
+  .gizmo-card {
+    width: 74px;
+    height: 74px;
+    border-radius: 50%;
+    background: rgba(20, 24, 33, 0.88);
+    border: 1.5px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5), inset 0 0 14px rgba(59, 130, 246, 0.15);
+    backdrop-filter: blur(10px);
+    pointer-events: auto;
+    position: relative;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  #gizmo-canvas {
+    width: 74px;
+    height: 74px;
+    display: block;
+    cursor: pointer;
+  }
+
+  .zoom-rail-card {
+    width: 44px;
+    height: 196px;
+    background: rgba(20, 24, 33, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 22px;
+    padding: 8px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+  }
+
+  .zoom-step-btn {
+    width: 30px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .zoom-step-btn:active {
+    background: var(--accent);
+  }
+
+  .vertical-slider-box {
+    position: relative;
+    width: 32px;
+    height: 112px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #zoom-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 108px;
+    height: 6px;
+    transform: rotate(-90deg);
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    outline: none;
+    margin: 0;
+  }
+
+  #zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--accent);
+    cursor: pointer;
+  }
+
+  .zoom-pct-tag {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: -0.02em;
+  }
+
+  /* Empty State Overlay */
+  #empty-state {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+    background: radial-gradient(circle at center, #181d27 0%, #0f1115 75%);
+  }
+
+  #empty-state.hidden {
+    display: none;
+  }
+
+  .drop-card {
+    max-width: 380px;
+    width: 100%;
+    background: var(--panel);
+    border: 1.5px dashed rgba(96, 165, 250, 0.45);
+    border-radius: 22px;
+    padding: 28px 22px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  }
+
+  .drop-card h1 {
+    margin: 0 0 8px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .drop-card p {
+    margin: 0 0 20px;
+    font-size: 13.5px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+
+  .load-big-btn {
+    width: 100%;
+    padding: 14px 18px;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 14px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 8px 22px var(--accent-glow);
+  }
+
+  .gesture-hint {
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  /* Bottom Docked Thumb Bar */
+  .bottom-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 12;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    backdrop-filter: blur(14px);
+    padding: 10px 12px calc(env(safe-area-inset-bottom, 10px) + 8px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.45);
+  }
+
+  .dock-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .tool-picker-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .tool-dropdown-btn {
+    background: var(--accent);
+    border: 1px solid #60a5fa;
+    color: #fff;
+    border-radius: 12px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .tool-dropdown-btn.is-move {
+    background: var(--move-amber);
+    border-color: #fbbf24;
+    color: #111827;
+  }
+
+  .tool-menu {
+    position: fixed;
+    left: 12px;
+    bottom: calc(env(safe-area-inset-bottom, 10px) + 114px);
+    z-index: 25;
+    background: #1a1f2b;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 14px;
+    padding: 6px;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 175px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65);
+  }
+
+  .tool-menu.open {
+    display: flex;
+  }
+
+  .tool-option {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .tool-option.selected {
+    background: rgba(59, 130, 246, 0.25);
+    color: #93c5fd;
+  }
+
+  .slider-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 6px 10px;
+  }
+
+  .slider-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .slider-val {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text);
+    min-width: 38px;
+    text-align: right;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    outline: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--accent);
+    cursor: pointer;
+  }
+
+  /* Row 2: 4 Strict Color Slots */
+  .slots-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .slot-card {
+    position: relative;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    padding: 6px 8px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.08s ease, background 0.15s ease;
+    min-width: 0;
+  }
+
+  .slot-card.active {
+    border-color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+  }
+
+  .swatch-dot {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.45);
+    flex-shrink: 0;
+  }
+
+  .slot-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .slot-num {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .slot-edit {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .swatch-picker-wrap {
+    position: relative;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+  }
+
+  .swatch-picker-wrap input[type="color"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+  }
+
+  /* Toast Notification */
+  #toast {
+    position: fixed;
+    top: 96px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-10px);
+    z-index: 30;
+    background: rgba(17, 24, 39, 0.96);
+    border: 1px solid var(--border);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 999px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    white-space: nowrap;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  }
+
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* Recent Projects List (Welcome Screen + Projects Modal) */
+  .recent-section {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    text-align: left;
+  }
+
+  .recent-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .recent-title {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 210px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  .recent-empty {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    padding: 12px 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+  }
+
+  .project-item {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 13px;
+    padding: 9px 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .project-info {
+    min-width: 0;
+    flex: 1;
+    cursor: pointer;
+  }
+
+  .project-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .project-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .mini-swatches {
+    display: inline-flex;
+    gap: 3px;
+  }
+
+  .mini-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+  }
+
+  .project-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .proj-open-btn {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    border-radius: 9px;
+    padding: 6px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .proj-del-btn {
+    background: rgba(239, 68, 68, 0.18);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+    border-radius: 9px;
+    padding: 6px 8px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* Export Choice Modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgba(10, 12, 16, 0.78);
+    backdrop-filter: blur(8px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .modal-backdrop.open {
+    display: flex;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-width: 370px;
+    background: #181c26;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 20px 44px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .modal-card h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+  }
+
+  .modal-card p {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+
+  .modal-action-btn {
+    width: 100%;
+    padding: 13px 14px;
+    border-radius: 13px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 700;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+  }
+
+  .modal-action-btn.primary {
+    background: var(--accent);
+    border-color: #60a5fa;
+    color: #fff;
+  }
+
+  .modal-action-btn:active {
+    transform: scale(0.98);
+  }
+
+  .modal-sub {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0.82;
+    margin-top: 2px;
+  }
+
+  .modal-cancel {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  /* Loading Spinner */
+  #loader-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(15, 17, 21, 0.84);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  #loader-overlay.active {
+    display: flex;
+  }
+
+  .spinner {
+    width: 34px;
+    height: 34px;
+    border: 3px solid rgba(255, 255, 255, 0.15);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
+</head>
+<body>
+
+<div id="viewport"></div>
+
+<div class="top-bar">
+  <div class="top-row">
+    <div class="top-group">
+      <button class="pill-btn" id="btn-open" title="Load STL, 3MF, or ZIP">📂 Open</button>
+      <button class="pill-btn" id="btn-projects" title="Recent Work-in-Progress Projects">🗂️ WIP</button>
+      <input type="file" id="file-input" accept=".stl,.3mf,.zip,model/stl,application/sla,application/zip,application/vnd.ms-package.3dmanufacturing-3dmodel+xml,application/octet-stream,*/*" style="display:none" />
+    </div>
+    <div class="top-group">
+      <button class="pill-btn" id="btn-undo" disabled title="Undo">↩</button>
+      <button class="pill-btn" id="btn-redo" disabled title="Redo">↪</button>
+      <button class="pill-btn" id="btn-save-wip" disabled title="Save Work in Progress">📌 Save</button>
+      <button class="pill-btn" id="btn-clean" title="Clean stray specks">✨</button>
+      <button class="pill-btn primary" id="btn-export" disabled title="Export painted 3MF">💾 Export</button>
+    </div>
+  </div>
+  <span class="model-badge" id="model-name">No model loaded</span>
+</div>
+
+<!-- Left-Side Orientation Gizmo Ball + Vertical Zoom Scale Slider -->
+<div class="left-nav-rail" id="left-nav-rail" style="display:none">
+  <div class="gizmo-card" title="Drag gizmo to rotate, or tap Front / Back / Left / Right / Top / Bottom">
+    <canvas id="gizmo-canvas" width="148" height="148"></canvas>
+  </div>
+  <div class="zoom-rail-card">
+    <button class="zoom-step-btn" id="btn-zoom-in" type="button" title="Zoom In">+</button>
+    <div class="vertical-slider-box">
+      <input type="range" id="zoom-slider" min="5" max="100" value="50" />
+    </div>
+    <button class="zoom-step-btn" id="btn-zoom-out" type="button" title="Zoom Out">−</button>
+    <span class="zoom-pct-tag" id="zoom-pct-label">1.0x</span>
+  </div>
+</div>
+
+<div id="empty-state">
+  <div class="drop-card">
+    <h1>JinxForge Coloring Book</h1>
+    <p>Open any <strong>.STL</strong>, <strong>.3MF</strong>, or <strong>.ZIP</strong> archive from your phone, Google Drive, or Jinx's emails. Paint with your stylus, then export straight to 3MF.</p>
+    <button class="load-big-btn" id="btn-open-hero">Choose STL / 3MF / ZIP File</button>
+    <div class="gesture-hint">
+      <span>✏️ 1-Finger / Pen: Paint (or Move View when selected)</span>
+      <span>🧭 Left Gizmo &amp; Zoom Rail: Snap Front/Back/Left/Right/Top &amp; Zoom</span>
+    </div>
+    <div class="recent-section">
+      <div class="recent-header">
+        <span class="recent-title">Recent Projects (Auto-Saved)</span>
+      </div>
+      <div class="recent-list" id="hero-recent-list">
+        <div class="recent-empty">No saved projects yet</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Upward Pop-Up Tool Menu -->
+<div class="tool-menu" id="tool-menu" role="menu">
+  <button class="tool-option selected" data-mode="fill">🪣 Tap Fill <span id="check-fill">✓</span></button>
+  <button class="tool-option" data-mode="brush">🖌️ Brush <span id="check-brush"></span></button>
+  <button class="tool-option" data-mode="fence">🚧 Stop Line <span id="check-fence"></span></button>
+  <button class="tool-option" data-mode="move">✋ Move View <span id="check-move"></span></button>
+</div>
+
+<div class="bottom-dock">
+  <div class="dock-row">
+    <div class="tool-picker-wrap">
+      <button class="tool-dropdown-btn" id="tool-dropdown-btn" type="button">
+        <span id="tool-btn-label">🪣 Tap Fill</span>
+        <span>▲</span>
+      </button>
+    </div>
+
+    <div class="slider-wrap" id="crease-control">
+      <span class="slider-label">Crease</span>
+      <input type="range" id="crease-slider" min="5" max="75" value="28" />
+      <span class="slider-val" id="crease-val">28°</span>
+    </div>
+
+    <!-- Ultra-fine logarithmic brush slider: 1..100 goes down to 0.03% (needle tip) up to 15% -->
+    <div class="slider-wrap" id="brush-control" style="display:none">
+      <span class="slider-label">Size</span>
+      <input type="range" id="brush-slider" min="1" max="100" value="22" />
+      <span class="slider-val" id="brush-val">0.20%</span>
+    </div>
+
+    <!-- Stop Line: draw walls that Tap Fill can't cross. Never printed or exported. -->
+    <div class="slider-wrap" id="fence-control" style="display:none">
+      <button class="pill-btn" id="btn-fence-mode" type="button" style="padding:6px 10px;font-size:12px;">✏️ Draw</button>
+      <button class="pill-btn" id="btn-fence-clear" type="button" style="padding:6px 10px;font-size:12px;">Clear all</button>
+      <span class="slider-val" id="fence-val" style="margin-left:auto">0 lines</span>
+    </div>
+
+    <button class="pill-btn" id="btn-reset-view" style="padding:7px 9px;font-size:12px;" title="Center View">🎯</button>
+  </div>
+
+  <div class="slots-bar" id="slots-bar">
+    <!-- Populated by JS with strict 4 slots -->
+  </div>
+</div>
+
+<!-- Recent Projects Modal -->
+<div class="modal-backdrop" id="projects-modal">
+  <div class="modal-card">
+    <h2>Recent Projects (WIP)</h2>
+    <p>Your work auto-saves after each stroke and whenever you tap <strong>📌 Save</strong>. Tap any project to pick up right where you left off.</p>
+    <div class="recent-list" id="modal-recent-list">
+      <div class="recent-empty">No saved projects yet</div>
+    </div>
+    <button class="modal-cancel" id="btn-close-projects-modal" type="button">Close</button>
+  </div>
+</div>
+
+<!-- Export Delivery Modal -->
+<div class="modal-backdrop" id="export-modal">
+  <div class="modal-card">
+    <h2>Export Painted 3MF</h2>
+    <p id="export-file-label">Ready to send or save your painted model.</p>
+
+    <button class="modal-action-btn primary" id="btn-share-email" type="button">
+      <span>
+        📧 Send via Gmail / Share Sheet
+        <span class="modal-sub">Opens Android Share with .3MF attached — pick Gmail</span>
+      </span>
+      <span>➔</span>
+    </button>
+
+    <button class="modal-action-btn" id="btn-save-downloads" type="button">
+      <span>
+        📥 Save to Phone Downloads
+        <span class="modal-sub">Saves directly to your Chrome Downloads folder</span>
+      </span>
+      <span>➔</span>
+    </button>
+
+    <button class="modal-cancel" id="btn-close-export-modal" type="button">Cancel</button>
+  </div>
+</div>
+
+<div id="toast">Ready</div>
+<div id="loader-overlay"><div class="spinner"></div><div id="loader-text">Processing mesh...</div></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+
+// ---------- App State ----------
+const state = {
+  slots: [
+    { id: 1, name: 'Slot 1', hex: '#222428' },
+    { id: 2, name: 'Slot 2', hex: '#ff6a13' },
+    { id: 3, name: 'Slot 3', hex: '#f4f4f6' },
+    { id: 4, name: 'Slot 4', hex: '#ffd21f' }
+  ],
+  activeSlot: 1,
+  toolMode: 'fill',    // 'fill' | 'brush' | 'fence' | 'move'
+  fence: null,         // per-triangle 1 = stop line (fill can't cross; never exported)
+  fenceErase: false,
+  fenceSnapshot: null,
+  fenceLastXY: null,
+  creaseAngle: 28,
+  brushRadiusMm: 0.25,
+  projectId: null,
+  modelName: 'model',
+  modelSpan: 100,
+  baseCameraDist: 140,
+  mesh: null,
+  brushCursorMesh: null,
+  geometry: null,
+  triCount: 0,
+  triSlots: null,
+  triNormals: null,
+  triCentroids: null,
+  triAreas: null,
+  adjacency: null,
+  undoStack: [],
+  redoStack: [],
+  isPainting: false,
+  strokeSnapshot: null,
+  activePointers: new Map(),
+  pointerDownPos: new Map(),
+  syncingZoomSlider: false
+};
+
+// ---------- DOM References ----------
+const viewport = document.getElementById('viewport');
+const fileInput = document.getElementById('file-input');
+const btnOpen = document.getElementById('btn-open');
+const btnOpenHero = document.getElementById('btn-open-hero');
+const btnUndo = document.getElementById('btn-undo');
+const btnRedo = document.getElementById('btn-redo');
+const btnClean = document.getElementById('btn-clean');
+const btnExport = document.getElementById('btn-export');
+const btnResetView = document.getElementById('btn-reset-view');
+const modelNameEl = document.getElementById('model-name');
+const emptyState = document.getElementById('empty-state');
+const leftNavRail = document.getElementById('left-nav-rail');
+const gizmoCanvas = document.getElementById('gizmo-canvas');
+const zoomSlider = document.getElementById('zoom-slider');
+const zoomPctLabel = document.getElementById('zoom-pct-label');
+const btnZoomIn = document.getElementById('btn-zoom-in');
+const btnZoomOut = document.getElementById('btn-zoom-out');
+const toolDropdownBtn = document.getElementById('tool-dropdown-btn');
+const toolBtnLabel = document.getElementById('tool-btn-label');
+const toolMenu = document.getElementById('tool-menu');
+const checkFill = document.getElementById('check-fill');
+const checkBrush = document.getElementById('check-brush');
+const checkMove = document.getElementById('check-move');
+const checkFence = document.getElementById('check-fence');
+const fenceControl = document.getElementById('fence-control');
+const btnFenceMode = document.getElementById('btn-fence-mode');
+const btnFenceClear = document.getElementById('btn-fence-clear');
+const fenceVal = document.getElementById('fence-val');
+const creaseControl = document.getElementById('crease-control');
+const brushControl = document.getElementById('brush-control');
+const creaseSlider = document.getElementById('crease-slider');
+const creaseVal = document.getElementById('crease-val');
+const brushSlider = document.getElementById('brush-slider');
+const brushVal = document.getElementById('brush-val');
+const slotsBar = document.getElementById('slots-bar');
+const toastEl = document.getElementById('toast');
+const loaderOverlay = document.getElementById('loader-overlay');
+const loaderText = document.getElementById('loader-text');
+
+let toastTimer = null;
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+}
+
+function setLoading(active, text = 'Processing mesh...') {
+  loaderText.textContent = text;
+  loaderOverlay.classList.toggle('active', active);
+}
+
+// ---------- Three.js Scene Setup ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0f1115);
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.05, 5000);
+camera.position.set(0, 45, 130);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+viewport.appendChild(renderer.domElement);
+
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x262b36, 1.15);
+scene.add(hemiLight);
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+keyLight.position.set(60, 120, 90);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0xdbeafe, 0.55);
+fillLight.position.set(-80, 40, -60);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xffffff, 0.45);
+rimLight.position.set(0, -90, 40);
+scene.add(rimLight);
+
+const gridHelper = new THREE.GridHelper(160, 16, 0x2a3140, 0x1b202b);
+gridHelper.position.y = -0.05;
+scene.add(gridHelper);
+
+// Visual brush ring on surface
+const cursorGeo = new THREE.RingGeometry(0.84, 1.0, 32);
+cursorGeo.rotateX(-Math.PI / 2);
+const cursorMat = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  side: THREE.DoubleSide,
+  transparent: true,
+  opacity: 0.9,
+  depthTest: false
+});
+const brushCursorMesh = new THREE.Mesh(cursorGeo, cursorMat);
+brushCursorMesh.visible = false;
+scene.add(brushCursorMesh);
+state.brushCursorMesh = brushCursorMesh;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.enablePan = true;
+controls.enableZoom = true;
+controls.enableRotate = true;
+controls.screenSpacePanning = true;
+controls.rotateSpeed = 0.85;
+controls.panSpeed = 1.0;
+controls.zoomSpeed = 1.0;
+controls.touches = {
+  ONE: THREE.TOUCH.ROTATE,
+  TWO: THREE.TOUCH.DOLLY_PAN
+};
+controls.mouseButtons = {
+  LEFT: THREE.MOUSE.ROTATE,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT: THREE.MOUSE.PAN
+};
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---------- Left-Side Interactive Orientation Gizmo Ball ----------
+const gizmoCtx = gizmoCanvas.getContext('2d');
+const gizmoAxes = [
+  { id: 'front', label: 'FRONT', dir: new THREE.Vector3(0, 0, 1), color: '#3b82f6' },
+  { id: 'back',  label: 'BACK',  dir: new THREE.Vector3(0, 0, -1), color: '#64748b' },
+  { id: 'right', label: 'RIGHT', dir: new THREE.Vector3(1, 0, 0), color: '#ef4444' },
+  { id: 'left',  label: 'LEFT',  dir: new THREE.Vector3(-1, 0, 0), color: '#f97316' },
+  { id: 'top',   label: 'TOP',   dir: new THREE.Vector3(0, 1, 0), color: '#10b981' },
+  { id: 'bot',   label: 'BOT',   dir: new THREE.Vector3(0, -1, 0), color: '#8b5cf6' }
+];
+let gizmoScreenNodes = [];
+
+function drawGizmoBall() {
+  const w = gizmoCanvas.width;
+  const h = gizmoCanvas.height;
+  const cx = w / 2;
+  const cy = h / 2;
+  const radius = 50;
+
+  gizmoCtx.clearRect(0, 0, w, h);
+
+  // Subtle latitude/longitude ring
+  gizmoCtx.strokeStyle = 'rgba(255,255,255,0.12)';
+  gizmoCtx.lineWidth = 1.5;
+  gizmoCtx.beginPath();
+  gizmoCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+  gizmoCtx.stroke();
+
+  const invCamQuat = camera.quaternion.clone().invert();
+  const projected = gizmoAxes.map((ax) => {
+    const v = ax.dir.clone().applyQuaternion(invCamQuat);
+    return {
+      ...ax,
+      x: cx + v.x * radius,
+      y: cy - v.y * radius,
+      z: v.z
+    };
+  });
+
+  // Sort back-to-front so front faces draw on top
+  projected.sort((a, b) => a.z - b.z);
+  gizmoScreenNodes = projected;
+
+  projected.forEach((node) => {
+    const isFront = node.z >= -0.05;
+    // Axis stem line from center
+    gizmoCtx.strokeStyle = isFront ? node.color : 'rgba(148,163,184,0.28)';
+    gizmoCtx.lineWidth = isFront ? 2.5 : 1.5;
+    gizmoCtx.beginPath();
+    gizmoCtx.moveTo(cx, cy);
+    gizmoCtx.lineTo(node.x, node.y);
+    gizmoCtx.stroke();
+
+    // Node circle
+    const r = isFront ? 15 : 10.5;
+    gizmoCtx.fillStyle = isFront ? node.color : 'rgba(51,65,85,0.85)';
+    gizmoCtx.beginPath();
+    gizmoCtx.arc(node.x, node.y, r, 0, Math.PI * 2);
+    gizmoCtx.fill();
+
+    if (isFront) {
+      gizmoCtx.strokeStyle = 'rgba(255,255,255,0.75)';
+      gizmoCtx.lineWidth = 1.5;
+      gizmoCtx.stroke();
+    }
+
+    gizmoCtx.fillStyle = '#ffffff';
+    gizmoCtx.font = isFront ? 'bold 9.5px sans-serif' : 'bold 8px sans-serif';
+    gizmoCtx.textAlign = 'center';
+    gizmoCtx.textBaseline = 'middle';
+    const shortLabel = node.label === 'FRONT' ? 'FRT'
+      : node.label === 'BACK' ? 'BCK'
+      : node.label === 'RIGHT' ? 'RGT'
+      : node.label === 'LEFT' ? 'LFT'
+      : node.label;
+    gizmoCtx.fillText(shortLabel, node.x, node.y + 0.5);
+  });
+}
+
+function snapCameraToView(dirVec, label) {
+  if (!state.mesh) return;
+  const dist = camera.position.distanceTo(controls.target) || state.baseCameraDist;
+  const target = controls.target.clone();
+  const offset = dirVec.clone().normalize().multiplyScalar(dist);
+  // Slight offset when snapping straight top/bottom so OrbitControls never hits gimbal lock
+  if (Math.abs(dirVec.y) > 0.99) {
+    offset.z += dist * 0.002;
+  }
+  camera.position.copy(target).add(offset);
+  camera.lookAt(target);
+  controls.update();
+  showToast(`View: ${label}`);
+}
+
+// Dragging gizmo orbits camera; tapping a gizmo face snaps straight to Front/Back/Left/Right/Top/Bottom
+let gizmoDragging = false;
+let gizmoStart = null;
+let gizmoMoved = false;
+
+gizmoCanvas.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  gizmoCanvas.setPointerCapture(e.pointerId);
+  gizmoDragging = true;
+  gizmoMoved = false;
+  gizmoStart = { x: e.clientX, y: e.clientY };
+});
+
+gizmoCanvas.addEventListener('pointermove', (e) => {
+  if (!gizmoDragging || !gizmoStart || !state.mesh) return;
+  e.stopPropagation();
+  const dx = e.clientX - gizmoStart.x;
+  const dy = e.clientY - gizmoStart.y;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) gizmoMoved = true;
+
+  if (gizmoMoved) {
+    const rotSpeed = 0.015;
+    const offset = camera.position.clone().sub(controls.target);
+    const spherical = new THREE.Spherical().setFromVector3(offset);
+    spherical.theta -= dx * rotSpeed;
+    spherical.phi -= dy * rotSpeed;
+    spherical.phi = Math.max(0.05, Math.min(Math.PI - 0.05, spherical.phi));
+    offset.setFromSpherical(spherical);
+    camera.position.copy(controls.target).add(offset);
+    camera.lookAt(controls.target);
+    controls.update();
+    gizmoStart = { x: e.clientX, y: e.clientY };
+  }
+});
+
+gizmoCanvas.addEventListener('pointerup', (e) => {
+  e.stopPropagation();
+  if (gizmoDragging && !gizmoMoved) {
+    const rect = gizmoCanvas.getBoundingClientRect();
+    const scaleX = gizmoCanvas.width / rect.width;
+    const scaleY = gizmoCanvas.height / rect.height;
+    const px = (e.clientX - rect.left) * scaleX;
+    const py = (e.clientY - rect.top) * scaleY;
+
+    // Pick closest front-facing (or nearest) node
+    let best = null;
+    let bestDist = Infinity;
+    for (let i = gizmoScreenNodes.length - 1; i >= 0; i--) {
+      const n = gizmoScreenNodes[i];
+      const d = Math.hypot(px - n.x, py - n.y);
+      if (d < 22 && d < bestDist) {
+        bestDist = d;
+        best = n;
+      }
+    }
+    if (best) {
+      snapCameraToView(best.dir, best.label);
+    }
+  }
+  gizmoDragging = false;
+  gizmoStart = null;
+});
+
+// ---------- Vertical Zoom Scale Slider ----------
+// Maps slider 5..100 logarithmically so you can zoom all the way in close to small details
+function applyZoomFromSlider(val) {
+  if (!state.mesh) return;
+  // Slider 50 = 1.0x (baseCameraDist); Slider 100 = 14x zoomed in (very close); Slider 5 = 0.35x zoomed out
+  const norm = (val - 50) / 50; // -0.9 .. +1.0
+  const zoomMult = Math.pow(14, norm); // 0.093x .. 14x
+  const desiredDist = Math.max(state.modelSpan * 0.04, state.baseCameraDist / zoomMult);
+
+  const dir = camera.position.clone().sub(controls.target);
+  if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1);
+  dir.normalize().multiplyScalar(desiredDist);
+  camera.position.copy(controls.target).add(dir);
+  controls.update();
+  zoomPctLabel.textContent = zoomMult.toFixed(1) + 'x';
+}
+
+function syncSliderFromCamera() {
+  if (!state.mesh || state.syncingZoomSlider) return;
+  const dist = camera.position.distanceTo(controls.target) || state.baseCameraDist;
+  const zoomMult = Math.max(0.1, Math.min(14, state.baseCameraDist / dist));
+  const norm = Math.log(zoomMult) / Math.log(14);
+  const sliderVal = Math.round(Math.max(5, Math.min(100, 50 + norm * 50)));
+  zoomSlider.value = String(sliderVal);
+  zoomPctLabel.textContent = zoomMult.toFixed(1) + 'x';
+}
+
+zoomSlider.addEventListener('input', (e) => {
+  state.syncingZoomSlider = true;
+  applyZoomFromSlider(parseInt(e.target.value, 10));
+  state.syncingZoomSlider = false;
+});
+
+btnZoomIn.addEventListener('click', () => {
+  const next = Math.min(100, parseInt(zoomSlider.value, 10) + 8);
+  zoomSlider.value = String(next);
+  applyZoomFromSlider(next);
+});
+
+btnZoomOut.addEventListener('click', () => {
+  const next = Math.max(5, parseInt(zoomSlider.value, 10) - 8);
+  zoomSlider.value = String(next);
+  applyZoomFromSlider(next);
+});
+
+// ---------- Render Loop ----------
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  drawGizmoBall();
+  syncSliderFromCamera();
+
+  if (brushCursorMesh.visible && state.toolMode === 'brush') {
+    const r = getZoomScaledRadius(brushCursorMesh.position);
+    state.brushRadiusMm = r;
+    brushCursorMesh.scale.setScalar(r);
+  }
+  renderer.render(scene, camera);
+}
+animate();
+
+// ---------- Slot UI Rendering ----------
+function renderSlots() {
+  slotsBar.innerHTML = '';
+  state.slots.forEach((slot) => {
+    const card = document.createElement('div');
+    card.className = 'slot-card' + (state.activeSlot === slot.id ? ' active' : '');
+
+    const pickerWrap = document.createElement('div');
+    pickerWrap.className = 'swatch-picker-wrap';
+    pickerWrap.title = 'Tap swatch to change filament color';
+
+    const dot = document.createElement('div');
+    dot.className = 'swatch-dot';
+    dot.style.backgroundColor = slot.hex;
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.value = slot.hex;
+    colorInput.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectSlot(slot.id);
+    });
+    colorInput.addEventListener('input', (e) => {
+      slot.hex = e.target.value;
+      dot.style.backgroundColor = slot.hex;
+      refreshMeshColors();
+      scheduleAutoSave();
+    });
+
+    pickerWrap.appendChild(dot);
+    pickerWrap.appendChild(colorInput);
+
+    const meta = document.createElement('div');
+    meta.className = 'slot-meta';
+    meta.innerHTML = `
+      <span class="slot-num">Slot ${slot.id}</span>
+      <span class="slot-edit">${slot.hex.toUpperCase()}</span>
+    `;
+
+    card.appendChild(pickerWrap);
+    card.appendChild(meta);
+
+    card.addEventListener('click', () => {
+      selectSlot(slot.id);
+    });
+
+    slotsBar.appendChild(card);
+  });
+}
+
+function selectSlot(slotId) {
+  state.activeSlot = slotId;
+  renderSlots();
+}
+
+renderSlots();
+
+// ---------- Upward Tool Dropdown & Ultra-Fine Brush Scaling ----------
+function closeToolMenu() {
+  toolMenu.classList.remove('open');
+}
+
+toolDropdownBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toolMenu.classList.toggle('open');
+});
+
+document.addEventListener('click', (e) => {
+  if (!toolMenu.contains(e.target) && e.target !== toolDropdownBtn) {
+    closeToolMenu();
+  }
+});
+
+// Logarithmic curve from 0.03% (needle-point detail) up to 12.0% of view/model scale
+function sliderToBrushFraction(rawSlider) {
+  const t = (rawSlider - 1) / 99; // 0 .. 1
+  const minPct = 0.03;
+  const maxPct = 12.0;
+  const pct = minPct * Math.pow(maxPct / minPct, t);
+  return { pct, frac: pct / 100 };
+}
+
+function getZoomScaledRadius(hitPoint) {
+  const raw = parseInt(brushSlider.value, 10);
+  const { frac } = sliderToBrushFraction(raw);
+  const camDist = hitPoint
+    ? camera.position.distanceTo(hitPoint)
+    : camera.position.distanceTo(controls.target);
+  const span = state.modelSpan || 100;
+  // Directly scales with camera distance when zoomed in close, so zooming in 10x makes the brush 10x finer!
+  const effectiveRef = Math.min(camDist * 0.85, span * 1.1);
+  return Math.max(0.005, effectiveRef * frac);
+}
+
+function updateBrushDisplay(hitPoint = null) {
+  const raw = parseInt(brushSlider.value, 10);
+  const { pct } = sliderToBrushFraction(raw);
+  const worldRadius = getZoomScaledRadius(hitPoint);
+  state.brushRadiusMm = worldRadius;
+  brushVal.textContent = pct < 1 ? pct.toFixed(2) + '%' : pct.toFixed(1) + '%';
+  brushCursorMesh.scale.setScalar(worldRadius);
+}
+
+function setToolMode(mode) {
+  state.toolMode = mode;
+  closeToolMenu();
+
+  checkFill.textContent = mode === 'fill' ? '✓' : '';
+  checkBrush.textContent = mode === 'brush' ? '✓' : '';
+  checkMove.textContent = mode === 'move' ? '✓' : '';
+  checkFence.textContent = mode === 'fence' ? '✓' : '';
+  fenceControl.style.display = mode === 'fence' ? 'flex' : 'none';
+
+  document.querySelectorAll('.tool-option').forEach((opt) => {
+    opt.classList.toggle('selected', opt.dataset.mode === mode);
+  });
+
+  toolDropdownBtn.classList.toggle('is-move', mode === 'move');
+
+  if (mode === 'fill') {
+    toolBtnLabel.textContent = '🪣 Tap Fill';
+    creaseControl.style.display = 'flex';
+    brushControl.style.display = 'none';
+    brushCursorMesh.visible = false;
+    controls.enabled = true;
+    showToast('Tap Fill selected: tap a region to fill');
+  } else if (mode === 'brush') {
+    toolBtnLabel.textContent = '🖌️ Brush';
+    creaseControl.style.display = 'none';
+    brushControl.style.display = 'flex';
+    updateBrushDisplay();
+    controls.enabled = true;
+    showToast('Brush selected: drag pen to paint');
+  } else if (mode === 'fence') {
+    toolBtnLabel.textContent = '🚧 Stop Line';
+    creaseControl.style.display = 'none';
+    brushControl.style.display = 'none';
+    brushCursorMesh.visible = false;
+    controls.enabled = true;
+    updateFenceCount();
+    showToast('Stop Line: draw where Tap Fill should stop. It never prints.');
+  } else if (mode === 'move') {
+    toolBtnLabel.textContent = '✋ Move View';
+    creaseControl.style.display = 'none';
+    brushControl.style.display = 'none';
+    brushCursorMesh.visible = false;
+    controls.enabled = true;
+    showToast('Move View selected: drag to spin, 2 fingers to slide/zoom');
+  }
+}
+
+document.querySelectorAll('.tool-option').forEach((opt) => {
+  opt.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setToolMode(opt.dataset.mode);
+  });
+});
+
+creaseSlider.addEventListener('input', (e) => {
+  state.creaseAngle = parseInt(e.target.value, 10);
+  creaseVal.textContent = state.creaseAngle + '°';
+});
+
+brushSlider.addEventListener('input', () => {
+  updateBrushDisplay();
+});
+
+btnResetView.addEventListener('click', () => {
+  if (!state.mesh) return;
+  frameMesh(state.mesh);
+  showToast('Model centered');
+});
+
+// ---------- Undo / Redo ----------
+let autoSaveTimer = null;
+function scheduleAutoSave() {
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    saveCurrentProjectToDB(true);
+  }, 600);
+}
+
+function pushUndoSnapshot(snapshot) {
+  state.undoStack.push(snapshot);
+  if (state.undoStack.length > 25) state.undoStack.shift();
+  state.redoStack.length = 0;
+  updateHistoryButtons();
+  scheduleAutoSave();
+}
+
+function updateHistoryButtons() {
+  btnUndo.disabled = state.undoStack.length === 0;
+  btnRedo.disabled = state.redoStack.length === 0;
+}
+
+btnUndo.addEventListener('click', () => {
+  if (!state.undoStack.length || !state.triSlots) return;
+  const item = state.undoStack.pop();
+  if (item && item.fence) {
+    state.redoStack.push({ fence: new Uint8Array(state.fence) });
+    state.fence = item.fence;
+    updateFenceCount();
+  } else {
+    state.redoStack.push(new Uint8Array(state.triSlots));
+    state.triSlots = item;
+  }
+  refreshMeshColors();
+  updateHistoryButtons();
+  showToast('Undid stroke');
+});
+
+btnRedo.addEventListener('click', () => {
+  if (!state.redoStack.length || !state.triSlots) return;
+  const item = state.redoStack.pop();
+  if (item && item.fence) {
+    state.undoStack.push({ fence: new Uint8Array(state.fence) });
+    state.fence = item.fence;
+    updateFenceCount();
+  } else {
+    state.undoStack.push(new Uint8Array(state.triSlots));
+    state.triSlots = item;
+  }
+  refreshMeshColors();
+  updateHistoryButtons();
+  showToast('Redid stroke');
+});
+
+// ---------- File Loading (.STL, .3MF, and .ZIP containing STL/3MF) ----------
+btnOpen.addEventListener('click', () => fileInput.click());
+btnOpenHero.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  fileInput.value = '';
+  await loadModelFile(file);
+});
+
+async function loadModelFile(file) {
+  setLoading(true, 'Loading ' + file.name + '...');
+  await new Promise((r) => setTimeout(r, 30));
+
+  try {
+    const ext = file.name.split('.').pop().toLowerCase();
+    state.modelName = file.name.replace(/\.[^/.]+$/, '');
+    modelNameEl.textContent = file.name;
+
+    let geometry = null;
+    let importedSlots = null;
+
+    const buffer = await file.arrayBuffer();
+    const header = new Uint8Array(buffer, 0, Math.min(4, buffer.byteLength));
+    const isZip = (header[0] === 0x50 && header[1] === 0x4b);
+
+    if (ext === 'stl' && !isZip) {
+      const loader = new STLLoader();
+      geometry = loader.parse(buffer);
+    } else if (isZip || ext === '3mf' || ext === 'zip') {
+      const zip = await JSZip.loadAsync(buffer);
+      const entries = Object.keys(zip.files).filter((p) => !zip.files[p].dir && !p.startsWith('__MACOSX'));
+
+      const modelFiles = entries.filter((p) => p.toLowerCase().endsWith('.model'));
+      if (modelFiles.length) {
+        const parsed = await parse3MFZip(zip);
+        geometry = parsed.geometry;
+        importedSlots = parsed.triSlots;
+        if (parsed.slotColors && parsed.slotColors.length) {
+          for (let i = 0; i < Math.min(4, parsed.slotColors.length); i++) {
+            if (/^#[0-9a-fA-F]{6}$/.test(parsed.slotColors[i])) {
+              state.slots[i].hex = parsed.slotColors[i];
+            }
+          }
+          renderSlots();
+        }
+      } else {
+        const stlFiles = entries.filter((p) => p.toLowerCase().endsWith('.stl'));
+        const nested3mf = entries.filter((p) => p.toLowerCase().endsWith('.3mf'));
+
+        if (stlFiles.length) {
+          let bestPath = stlFiles[0];
+          let bestSize = 0;
+          for (const p of stlFiles) {
+            const data = await zip.file(p).async('arraybuffer');
+            if (data.byteLength > bestSize) {
+              bestSize = data.byteLength;
+              bestPath = p;
+            }
+          }
+          const stlBuf = await zip.file(bestPath).async('arraybuffer');
+          const innerName = bestPath.split('/').pop();
+          state.modelName = innerName.replace(/\.[^/.]+$/, '');
+          modelNameEl.textContent = innerName;
+          const loader = new STLLoader();
+          geometry = loader.parse(stlBuf);
+        } else if (nested3mf.length) {
+          const innerBuf = await zip.file(nested3mf[0]).async('arraybuffer');
+          const innerZip = await JSZip.loadAsync(innerBuf);
+          const parsed = await parse3MFZip(innerZip);
+          geometry = parsed.geometry;
+          importedSlots = parsed.triSlots;
+          const innerName = nested3mf[0].split('/').pop();
+          state.modelName = innerName.replace(/\.[^/.]+$/, '');
+          modelNameEl.textContent = innerName;
+        } else {
+          throw new Error('No .STL or .3MF file found inside that ZIP archive.');
+        }
+      }
+    } else {
+      const loader = new STLLoader();
+      geometry = loader.parse(buffer);
+    }
+
+    state.projectId = state.modelName + '_' + Date.now();
+    setupMeshFromGeometry(geometry, importedSlots);
+    emptyState.classList.add('hidden');
+    leftNavRail.style.display = 'flex';
+    btnExport.disabled = false;
+    btnSaveWip.disabled = false;
+    scheduleAutoSave();
+    showToast(`Loaded ${state.triCount.toLocaleString()} triangles`);
+  } catch (err) {
+    console.error(err);
+    alert('Could not load model: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function parse3MFZip(zip) {
+  let slotColors = [];
+  const projConfig = zip.file('Metadata/project_settings.config');
+  if (projConfig) {
+    try {
+      const cfgText = await projConfig.async('string');
+      const cfg = JSON.parse(cfgText);
+      if (Array.isArray(cfg.filament_colour)) {
+        slotColors = cfg.filament_colour.slice(0, 4);
+      }
+    } catch (_) {}
+  }
+
+  const modelFiles = Object.keys(zip.files).filter((p) => p.toLowerCase().endsWith('.model'));
+  if (!modelFiles.length) throw new Error('No .model mesh found inside 3MF archive.');
+
+  const objectModels = modelFiles.filter((p) => p.includes('Objects/'));
+  const targets = objectModels.length ? objectModels : [modelFiles[0]];
+
+  const positions = [];
+  const triSlotsList = [];
+  const parser = new DOMParser();
+
+  for (const path of targets) {
+    const xmlStr = await zip.file(path).async('string');
+    const doc = parser.parseFromString(xmlStr, 'application/xml');
+    const meshes = doc.getElementsByTagName('mesh');
+    for (let m = 0; m < meshes.length; m++) {
+      const meshEl = meshes[m];
+      const verts = meshEl.getElementsByTagName('vertex');
+      const vArr = new Float32Array(verts.length * 3);
+      for (let i = 0; i < verts.length; i++) {
+        vArr[i * 3] = parseFloat(verts[i].getAttribute('x'));
+        vArr[i * 3 + 1] = parseFloat(verts[i].getAttribute('y'));
+        vArr[i * 3 + 2] = parseFloat(verts[i].getAttribute('z'));
+      }
+
+      const tris = meshEl.getElementsByTagName('triangle');
+      for (let t = 0; t < tris.length; t++) {
+        const tr = tris[t];
+        const v1 = parseInt(tr.getAttribute('v1'), 10);
+        const v2 = parseInt(tr.getAttribute('v2'), 10);
+        const v3 = parseInt(tr.getAttribute('v3'), 10);
+
+        positions.push(
+          vArr[v1 * 3], vArr[v1 * 3 + 1], vArr[v1 * 3 + 2],
+          vArr[v2 * 3], vArr[v2 * 3 + 1], vArr[v2 * 3 + 2],
+          vArr[v3 * 3], vArr[v3 * 3 + 1], vArr[v3 * 3 + 2]
+        );
+
+        const paintCode = tr.getAttribute('paint_color') || tr.getAttribute('slic3rpe:mmu_segmentation');
+        triSlotsList.push(decodePaintColorCode(paintCode));
+      }
+    }
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  return {
+    geometry: geom,
+    triSlots: new Uint8Array(triSlotsList),
+    slotColors
+  };
+}
+
+function decodePaintColorCode(code) {
+  if (!code) return 1;
+  const clean = code.trim().toUpperCase();
+  if (clean === '4') return 1;
+  if (clean === '8') return 2;
+  if (clean === '0C' || clean === 'C') return 3;
+  if (clean === '1C') return 4;
+  const last = parseInt(clean[clean.length - 1], 16);
+  if (!isNaN(last)) {
+    const high = (last >> 2) & 0x3;
+    if (high === 1) return 1;
+    if (high === 2) return 2;
+    if (high === 3 && clean.length >= 2) {
+      const prev = parseInt(clean[clean.length - 2], 16);
+      return Math.min(4, Math.max(1, prev + 3));
+    }
+  }
+  return 1;
+}
+
+function encodePaintColorCode(slot) {
+  switch (slot) {
+    case 1: return '4';
+    case 2: return '8';
+    case 3: return '0C';
+    case 4: return '1C';
+    default: return '4';
+  }
+}
+
+// ---------- Mesh Preparation & Adjacency Graph ----------
+function setupMeshFromGeometry(rawGeometry, importedSlots = null, importedFence = null) {
+  if (state.mesh) {
+    scene.remove(state.mesh);
+    state.geometry.dispose();
+  }
+
+  const geom = rawGeometry.index ? rawGeometry.toNonIndexed() : rawGeometry;
+  geom.computeVertexNormals();
+
+  geom.computeBoundingBox();
+  const box = geom.boundingBox;
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+
+  const rawPosCopy = new Float32Array(geom.attributes.position.array);
+
+  geom.rotateX(-Math.PI / 2);
+  geom.computeBoundingBox();
+  geom.boundingBox.getSize(size);
+  geom.boundingBox.getCenter(center);
+
+  const minY = geom.boundingBox.min.y;
+  geom.translate(-center.x, -minY, -center.z);
+
+  const posAttr = geom.attributes.position;
+  const triCount = Math.floor(posAttr.count / 3);
+  state.triCount = triCount;
+  state.geometry = geom;
+  geom.userData.rawPositions = rawPosCopy;
+
+  state.triSlots = importedSlots && importedSlots.length === triCount
+    ? importedSlots
+    : new Uint8Array(triCount).fill(1);
+
+  const triNormals = new Float32Array(triCount * 3);
+  const triCentroids = new Float32Array(triCount * 3);
+  const triAreas = new Float32Array(triCount);
+
+  const pA = new THREE.Vector3(), pB = new THREE.Vector3(), pC = new THREE.Vector3();
+  const cb = new THREE.Vector3(), ab = new THREE.Vector3();
+
+  const vertMap = new Map();
+  const triVertIds = new Int32Array(triCount * 3);
+  let nextVertId = 0;
+  const invTol = 10000;
+
+  function getVertId(x, y, z) {
+    const key = `${Math.round(x * invTol)},${Math.round(y * invTol)},${Math.round(z * invTol)}`;
+    let id = vertMap.get(key);
+    if (id === undefined) {
+      id = nextVertId++;
+      vertMap.set(key, id);
+    }
+    return id;
+  }
+
+  for (let t = 0; t < triCount; t++) {
+    const i0 = t * 3;
+    pA.fromBufferAttribute(posAttr, i0);
+    pB.fromBufferAttribute(posAttr, i0 + 1);
+    pC.fromBufferAttribute(posAttr, i0 + 2);
+
+    triCentroids[t * 3] = (pA.x + pB.x + pC.x) / 3;
+    triCentroids[t * 3 + 1] = (pA.y + pB.y + pC.y) / 3;
+    triCentroids[t * 3 + 2] = (pA.z + pB.z + pC.z) / 3;
+
+    cb.subVectors(pC, pB);
+    ab.subVectors(pA, pB);
+    cb.cross(ab);
+    const len = cb.length();
+    triAreas[t] = 0.5 * len;
+    if (len > 1e-12) cb.divideScalar(len);
+
+    triNormals[t * 3] = cb.x;
+    triNormals[t * 3 + 1] = cb.y;
+    triNormals[t * 3 + 2] = cb.z;
+
+    triVertIds[t * 3] = getVertId(pA.x, pA.y, pA.z);
+    triVertIds[t * 3 + 1] = getVertId(pB.x, pB.y, pB.z);
+    triVertIds[t * 3 + 2] = getVertId(pC.x, pC.y, pC.z);
+  }
+
+  const edgeMap = new Map();
+  const neighbors = Array.from({ length: triCount }, () => []);
+
+  function addEdge(u, v, triIdx) {
+    const key = u < v ? `${u}_${v}` : `${v}_${u}`;
+    const existing = edgeMap.get(key);
+    if (existing === undefined) {
+      edgeMap.set(key, triIdx);
+    } else {
+      neighbors[triIdx].push(existing);
+      neighbors[existing].push(triIdx);
+    }
+  }
+
+  for (let t = 0; t < triCount; t++) {
+    const v0 = triVertIds[t * 3];
+    const v1 = triVertIds[t * 3 + 1];
+    const v2 = triVertIds[t * 3 + 2];
+    addEdge(v0, v1, t);
+    addEdge(v1, v2, t);
+    addEdge(v2, v0, t);
+  }
+
+  state.fence = importedFence && importedFence.length === triCount
+    ? importedFence
+    : new Uint8Array(triCount);
+
+  state.triNormals = triNormals;
+  state.triCentroids = triCentroids;
+  state.triAreas = triAreas;
+  state.adjacency = neighbors;
+  state.undoStack.length = 0;
+  state.redoStack.length = 0;
+  updateHistoryButtons();
+
+  const colors = new Float32Array(posAttr.count * 3);
+  geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.55,
+    metalness: 0.05
+  });
+
+  state.mesh = new THREE.Mesh(geom, mat);
+  scene.add(state.mesh);
+
+  refreshMeshColors();
+  frameMesh(state.mesh);
+  updateBrushDisplay();
+}
+
+function refreshMeshColors() {
+  if (!state.geometry || !state.triSlots) return;
+  const colorAttr = state.geometry.attributes.color;
+  const arr = colorAttr.array;
+
+  const slotColors = [
+    null,
+    new THREE.Color(state.slots[0].hex),
+    new THREE.Color(state.slots[1].hex),
+    new THREE.Color(state.slots[2].hex),
+    new THREE.Color(state.slots[3].hex)
+  ];
+
+  const fenceCol = new THREE.Color('#ff2bd6');
+  const tmpCol = new THREE.Color();
+  const fence = state.fence;
+  for (let t = 0; t < state.triCount; t++) {
+    let c = slotColors[state.triSlots[t]] || slotColors[1];
+    if (fence && fence[t]) c = tmpCol.copy(c).lerp(fenceCol, 0.8);
+    const base = t * 9;
+    arr[base] = arr[base + 3] = arr[base + 6] = c.r;
+    arr[base + 1] = arr[base + 4] = arr[base + 7] = c.g;
+    arr[base + 2] = arr[base + 5] = arr[base + 8] = c.b;
+  }
+  colorAttr.needsUpdate = true;
+}
+
+function frameMesh(mesh) {
+  const box = new THREE.Box3().setFromObject(mesh);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+
+  const maxDim = Math.max(size.x, size.y, size.z) || 50;
+  state.modelSpan = maxDim;
+  const fov = camera.fov * (Math.PI / 180);
+  const dist = Math.abs(maxDim / (2 * Math.tan(fov / 2))) * 1.65;
+  state.baseCameraDist = dist;
+
+  controls.target.copy(center);
+  camera.position.set(center.x, center.y + maxDim * 0.25, center.z + dist);
+  camera.near = Math.max(0.005, maxDim * 0.0005);
+  camera.far = maxDim * 50;
+  camera.updateProjectionMatrix();
+  controls.update();
+
+  gridHelper.scale.setScalar(maxDim / 80);
+  zoomSlider.value = '50';
+  zoomPctLabel.textContent = '1.0x';
+}
+
+// ---------- Painting Algorithms (Tap-Fill & Local Brush) ----------
+const raycaster = new THREE.Raycaster();
+const pointerNDC = new THREE.Vector2();
+
+function getHitTriangle(clientX, clientY) {
+  if (!state.mesh) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointerNDC, camera);
+  const hits = raycaster.intersectObject(state.mesh, false);
+  return hits.length ? hits[0] : null;
+}
+
+function updateBrushCursor(hit) {
+  if (!hit || state.toolMode !== 'brush') {
+    brushCursorMesh.visible = false;
+    return;
+  }
+  updateBrushDisplay(hit.point);
+  brushCursorMesh.visible = true;
+  brushCursorMesh.position.copy(hit.point);
+  const n = hit.face ? hit.face.normal : new THREE.Vector3(0, 1, 0);
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+  brushCursorMesh.quaternion.copy(q);
+  brushCursorMesh.scale.setScalar(state.brushRadiusMm);
+}
+
+function floodFillFromTriangle(seedTri, targetSlot) {
+  const startSlot = state.triSlots[seedTri];
+  if (startSlot === targetSlot) return false;
+
+  const cosThreshold = Math.cos((state.creaseAngle * Math.PI) / 180);
+  const visited = new Uint8Array(state.triCount);
+  const queue = [seedTri];
+  visited[seedTri] = 1;
+  const touchedFence = [];
+
+  const normals = state.triNormals;
+  const adj = state.adjacency;
+  let head = 0;
+
+  while (head < queue.length) {
+    const curr = queue[head++];
+    state.triSlots[curr] = targetSlot;
+
+    const nx = normals[curr * 3];
+    const ny = normals[curr * 3 + 1];
+    const nz = normals[curr * 3 + 2];
+
+    const nbrs = adj[curr];
+    for (let i = 0; i < nbrs.length; i++) {
+      const nb = nbrs[i];
+      if (visited[nb]) continue;
+      if (state.triSlots[nb] !== startSlot) continue;
+      if (state.fence && state.fence[nb]) {
+        // stop line: never spread past it; the line itself is settled below
+        visited[nb] = 1;
+        touchedFence.push(nb);
+        continue;
+      }
+
+      const dot = nx * normals[nb * 3] + ny * normals[nb * 3 + 1] + nz * normals[nb * 3 + 2];
+      if (dot >= cosThreshold) {
+        visited[nb] = 1;
+        queue.push(nb);
+      }
+    }
+  }
+  if (touchedFence.length) settleFenceColors(touchedFence);
+  return true;
+}
+
+// The triangles under a stop line take the color of whichever side is nearer,
+// so the color edge lands in the middle of the line and no stripe is left behind.
+function settleFenceColors(startTris) {
+  const adj = state.adjacency, fence = state.fence;
+  // the stretch of line the fill touched
+  const inBand = new Uint8Array(state.triCount);
+  const band = [];
+  for (const t of startTris) if (!inBand[t]) { inBand[t] = 1; band.push(t); }
+  for (let h = 0; h < band.length; h++) {
+    const nbrs = adj[band[h]];
+    for (let i = 0; i < nbrs.length; i++) {
+      const nb = nbrs[i];
+      if (fence[nb] && !inBand[nb]) { inBand[nb] = 1; band.push(nb); }
+    }
+  }
+  // grow inward from both sides at once
+  const newSlot = new Uint8Array(state.triCount);
+  let frontier = [];
+  for (const t of band) {
+    const nbrs = adj[t];
+    for (let i = 0; i < nbrs.length; i++) {
+      const nb = nbrs[i];
+      if (!fence[nb]) { newSlot[t] = state.triSlots[nb]; frontier.push(t); break; }
+    }
+  }
+  while (frontier.length) {
+    const next = [];
+    for (const t of frontier) {
+      const nbrs = adj[t];
+      for (let i = 0; i < nbrs.length; i++) {
+        const nb = nbrs[i];
+        if (inBand[nb] && !newSlot[nb]) { newSlot[nb] = newSlot[t]; next.push(nb); }
+      }
+    }
+    frontier = next;
+  }
+  for (const t of band) if (newSlot[t]) state.triSlots[t] = newSlot[t];
+}
+
+function paintBrushAtPoint(hitPoint, hitTri, targetSlot) {
+  const radius = state.brushRadiusMm;
+  const rSq = radius * radius;
+  const centroids = state.triCentroids;
+  const normals = state.triNormals;
+  const adj = state.adjacency;
+
+  const hitNx = normals[hitTri * 3];
+  const hitNy = normals[hitTri * 3 + 1];
+  const hitNz = normals[hitTri * 3 + 2];
+
+  const visited = new Uint8Array(state.triCount);
+  const queue = [hitTri];
+  visited[hitTri] = 1;
+  let head = 0;
+  let changed = false;
+
+  // Always paint the directly touched triangle even if brush radius is smaller than one triangle
+  if (state.triSlots[hitTri] !== targetSlot) {
+    state.triSlots[hitTri] = targetSlot;
+    changed = true;
+  }
+
+  while (head < queue.length) {
+    const curr = queue[head++];
+    const cx = centroids[curr * 3];
+    const cy = centroids[curr * 3 + 1];
+    const cz = centroids[curr * 3 + 2];
+
+    const dx = cx - hitPoint.x;
+    const dy = cy - hitPoint.y;
+    const dz = cz - hitPoint.z;
+    const dSq = dx * dx + dy * dy + dz * dz;
+
+    if (dSq <= rSq) {
+      const dot = hitNx * normals[curr * 3] + hitNy * normals[curr * 3 + 1] + hitNz * normals[curr * 3 + 2];
+      if (dot > 0.25 && state.triSlots[curr] !== targetSlot) {
+        state.triSlots[curr] = targetSlot;
+        changed = true;
+      }
+    }
+
+    const nbrs = adj[curr];
+    for (let i = 0; i < nbrs.length; i++) {
+      const nb = nbrs[i];
+      if (visited[nb]) continue;
+      const ndx = centroids[nb * 3] - hitPoint.x;
+      const ndy = centroids[nb * 3 + 1] - hitPoint.y;
+      const ndz = centroids[nb * 3 + 2] - hitPoint.z;
+      if (ndx * ndx + ndy * ndy + ndz * ndz <= rSq) {
+        visited[nb] = 1;
+        queue.push(nb);
+      }
+    }
+  }
+
+  return changed;
+}
+
+// ---------- Stop Lines (fill blockers that never print) ----------
+function updateFenceCount() {
+  if (!state.fence) { fenceVal.textContent = '0 lines'; return; }
+  let n = 0;
+  for (let i = 0; i < state.fence.length; i++) n += state.fence[i];
+  fenceVal.textContent = n ? `${n.toLocaleString()} tris` : 'no lines';
+}
+
+function fenceRadius(hitPoint) {
+  const camDist = camera.position.distanceTo(hitPoint);
+  // thin line that stays thin on screen as you zoom in
+  return Math.max(0.15, Math.min(camDist * 0.006, (state.modelSpan || 100) * 0.01));
+}
+
+function markFenceAt(hitPoint, hitTri) {
+  const value = state.fenceErase ? 0 : 1;
+  const r = fenceRadius(hitPoint) * (state.fenceErase ? 2.5 : 1);
+  const rSq = r * r;
+  const centroids = state.triCentroids;
+  const adj = state.adjacency;
+  const visited = new Uint8Array(state.triCount);
+  const queue = [hitTri];
+  visited[hitTri] = 1;
+  let changed = false;
+  if (state.fence[hitTri] !== value) { state.fence[hitTri] = value; changed = true; }
+  let head = 0;
+  while (head < queue.length) {
+    const curr = queue[head++];
+    const nbrs = adj[curr];
+    for (let i = 0; i < nbrs.length; i++) {
+      const nb = nbrs[i];
+      if (visited[nb]) continue;
+      const dx = centroids[nb * 3] - hitPoint.x;
+      const dy = centroids[nb * 3 + 1] - hitPoint.y;
+      const dz = centroids[nb * 3 + 2] - hitPoint.z;
+      if (dx * dx + dy * dy + dz * dz <= rSq) {
+        visited[nb] = 1;
+        queue.push(nb);
+        if (state.fence[nb] !== value) { state.fence[nb] = value; changed = true; }
+      }
+    }
+  }
+  return changed;
+}
+
+// Mark along the finger's path, not just where events land, so fast strokes leave no gaps
+function fenceStrokeTo(x, y) {
+  const last = state.fenceLastXY || { x, y };
+  const dx = x - last.x, dy = y - last.y;
+  const steps = Math.max(1, Math.ceil(Math.sqrt(dx * dx + dy * dy) / 3));
+  let changed = false;
+  for (let i = 1; i <= steps; i++) {
+    const hit = getHitTriangle(last.x + (dx * i) / steps, last.y + (dy * i) / steps);
+    if (hit && markFenceAt(hit.point, hit.faceIndex)) changed = true;
+  }
+  state.fenceLastXY = { x, y };
+  return changed;
+}
+
+// After a stroke, widen new line by one ring of triangles so fill can't slip
+// through where two line triangles only touch at a corner
+function sealFenceStroke(before) {
+  if (state.fenceErase) return;
+  const adj = state.adjacency;
+  const add = [];
+  for (let t = 0; t < state.triCount; t++) {
+    if (state.fence[t] && !before[t]) {
+      const nbrs = adj[t];
+      for (let i = 0; i < nbrs.length; i++) if (!state.fence[nbrs[i]]) add.push(nbrs[i]);
+    }
+  }
+  for (let i = 0; i < add.length; i++) state.fence[add[i]] = 1;
+  // triangles boxed in by the line (2+ sides on it) join the line, so no unfillable pockets remain
+  for (let pass = 0; pass < 2; pass++) {
+    const pocket = [];
+    for (let t = 0; t < state.triCount; t++) {
+      if (state.fence[t]) continue;
+      const nbrs = adj[t];
+      let k = 0;
+      for (let i = 0; i < nbrs.length; i++) k += state.fence[nbrs[i]];
+      if (k >= 2) pocket.push(t);
+    }
+    for (let i = 0; i < pocket.length; i++) state.fence[pocket[i]] = 1;
+  }
+}
+
+btnFenceMode.addEventListener('click', () => {
+  state.fenceErase = !state.fenceErase;
+  btnFenceMode.textContent = state.fenceErase ? '🧽 Erase' : '✏️ Draw';
+  showToast(state.fenceErase ? 'Erase: rub out stop lines' : 'Draw: lay down stop lines');
+});
+
+btnFenceClear.addEventListener('click', () => {
+  if (!state.fence) return;
+  let any = false;
+  for (let i = 0; i < state.fence.length; i++) if (state.fence[i]) { any = true; break; }
+  if (!any) { showToast('No stop lines to clear'); return; }
+  pushUndoSnapshot({ fence: new Uint8Array(state.fence) });
+  state.fence.fill(0);
+  refreshMeshColors();
+  updateFenceCount();
+  showToast('All stop lines cleared');
+});
+
+// ---------- Printability Speck Cleanup ----------
+btnClean.addEventListener('click', () => {
+  if (!state.triSlots) return;
+  const snapshot = new Uint8Array(state.triSlots);
+  const visited = new Uint8Array(state.triCount);
+  const adj = state.adjacency;
+  const areas = state.triAreas;
+  const minIslandArea = 2.5;
+  let cleanedIslands = 0;
+
+  for (let t = 0; t < state.triCount; t++) {
+    if (visited[t]) continue;
+    const islandSlot = state.triSlots[t];
+    const comp = [t];
+    visited[t] = 1;
+    let totalArea = areas[t];
+    const borderSlotArea = new Map();
+
+    let head = 0;
+    while (head < comp.length) {
+      const curr = comp[head++];
+      const nbrs = adj[curr];
+      for (let i = 0; i < nbrs.length; i++) {
+        const nb = nbrs[i];
+        const nbSlot = state.triSlots[nb];
+        if (nbSlot === islandSlot) {
+          if (!visited[nb]) {
+            visited[nb] = 1;
+            comp.push(nb);
+            totalArea += areas[nb];
+          }
+        } else {
+          borderSlotArea.set(nbSlot, (borderSlotArea.get(nbSlot) || 0) + areas[nb]);
+        }
+      }
+    }
+
+    if (totalArea < minIslandArea && borderSlotArea.size > 0) {
+      let bestSlot = islandSlot;
+      let maxA = -1;
+      for (const [s, a] of borderSlotArea.entries()) {
+        if (a > maxA) {
+          maxA = a;
+          bestSlot = s;
+        }
+      }
+      if (bestSlot !== islandSlot) {
+        for (let i = 0; i < comp.length; i++) {
+          state.triSlots[comp[i]] = bestSlot;
+        }
+        cleanedIslands++;
+      }
+    }
+  }
+
+  if (cleanedIslands > 0) {
+    pushUndoSnapshot(snapshot);
+    refreshMeshColors();
+    showToast(`Cleaned ${cleanedIslands} stray speck(s)`);
+  } else {
+    showToast('Mesh is already clean — no stray specks found');
+  }
+});
+
+// ---------- Stylus & Touch Gesture Handling ----------
+const canvas = renderer.domElement;
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (!state.mesh) return;
+  closeToolMenu();
+
+  state.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
+  state.pointerDownPos.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (state.toolMode === 'move') {
+    brushCursorMesh.visible = false;
+    controls.enabled = true;
+    return;
+  }
+
+  if (state.activePointers.size >= 2) {
+    if (state.isPainting && state.strokeSnapshot) {
+      state.triSlots = state.strokeSnapshot;
+      refreshMeshColors();
+    }
+    if (state.fenceSnapshot) {
+      state.fence = state.fenceSnapshot;
+      state.fenceSnapshot = null;
+      refreshMeshColors();
+    }
+    state.isPainting = false;
+    state.strokeSnapshot = null;
+    brushCursorMesh.visible = false;
+    controls.enabled = true;
+    return;
+  }
+
+  if (state.toolMode === 'brush') {
+    const hit = getHitTriangle(e.clientX, e.clientY);
+    if (!hit) {
+      brushCursorMesh.visible = false;
+      controls.enabled = true;
+      return;
+    }
+    updateBrushCursor(hit);
+    controls.enabled = false;
+    state.isPainting = true;
+    state.strokeSnapshot = new Uint8Array(state.triSlots);
+    const changed = paintBrushAtPoint(hit.point, hit.faceIndex, state.activeSlot);
+    if (changed) refreshMeshColors();
+  } else if (state.toolMode === 'fill') {
+    controls.enabled = true;
+  } else if (state.toolMode === 'fence') {
+    const hit = getHitTriangle(e.clientX, e.clientY);
+    if (!hit) { controls.enabled = true; return; }
+    controls.enabled = false;
+    state.fenceSnapshot = new Uint8Array(state.fence);
+    state.fenceLastXY = { x: e.clientX, y: e.clientY };
+    if (markFenceAt(hit.point, hit.faceIndex)) refreshMeshColors();
+  }
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!state.activePointers.has(e.pointerId)) return;
+  state.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
+
+  if (state.toolMode === 'fence' && state.activePointers.size === 1 && state.fenceSnapshot) {
+    if (fenceStrokeTo(e.clientX, e.clientY)) refreshMeshColors();
+    return;
+  }
+  if (state.toolMode === 'brush' && state.activePointers.size === 1) {
+    const hit = getHitTriangle(e.clientX, e.clientY);
+    updateBrushCursor(hit);
+    if (state.isPainting && hit) {
+      const changed = paintBrushAtPoint(hit.point, hit.faceIndex, state.activeSlot);
+      if (changed) refreshMeshColors();
+    }
+  }
+});
+
+function handlePointerEnd(e) {
+  const startPos = state.pointerDownPos.get(e.pointerId);
+  state.pointerDownPos.delete(e.pointerId);
+  const wasOnlyPointer = state.activePointers.size === 1 && state.activePointers.has(e.pointerId);
+  state.activePointers.delete(e.pointerId);
+
+  if (state.toolMode === 'brush' && state.isPainting) {
+    if (state.strokeSnapshot) {
+      let diff = false;
+      for (let i = 0; i < state.triSlots.length; i++) {
+        if (state.triSlots[i] !== state.strokeSnapshot[i]) {
+          diff = true;
+          break;
+        }
+      }
+      if (diff) pushUndoSnapshot(state.strokeSnapshot);
+    }
+    state.isPainting = false;
+    state.strokeSnapshot = null;
+    brushCursorMesh.visible = false;
+  } else if (state.toolMode === 'fence' && state.fenceSnapshot) {
+    const before = state.fenceSnapshot;
+    state.fenceSnapshot = null;
+    state.fenceLastXY = null;
+    sealFenceStroke(before);
+    let diff = false;
+    for (let i = 0; i < state.fence.length; i++) if (state.fence[i] !== before[i]) { diff = true; break; }
+    if (diff) pushUndoSnapshot({ fence: before });
+    refreshMeshColors();
+    updateFenceCount();
+  } else if (state.toolMode === 'fill' && wasOnlyPointer && startPos) {
+    const dx = e.clientX - startPos.x;
+    const dy = e.clientY - startPos.y;
+    if (dx * dx + dy * dy < 100) {
+      const hit = getHitTriangle(e.clientX, e.clientY);
+      if (hit) {
+        const snap = new Uint8Array(state.triSlots);
+        const changed = floodFillFromTriangle(hit.faceIndex, state.activeSlot);
+        if (changed) {
+          refreshMeshColors();
+          pushUndoSnapshot(snap);
+        }
+      }
+    }
+  }
+
+  if (state.activePointers.size === 0) {
+    controls.enabled = true;
+  }
+}
+
+canvas.addEventListener('pointerup', handlePointerEnd);
+canvas.addEventListener('pointercancel', handlePointerEnd);
+
+// ---------- IndexedDB Work-in-Progress (WIP) Project Storage ----------
+const DB_NAME = 'JinxForgeColoringDB';
+const DB_STORE = 'projects';
+const DB_VERSION = 1;
+
+function openProjectDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(DB_STORE)) {
+        db.createObjectStore(DB_STORE, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function getAllSavedProjects() {
+  try {
+    const db = await openProjectDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, 'readonly');
+      const store = tx.objectStore(DB_STORE);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const list = req.result || [];
+        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        resolve(list);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.warn('IndexedDB unavailable:', err);
+    return [];
+  }
+}
+
+async function saveCurrentProjectToDB(silent = false) {
+  if (!state.geometry || !state.triSlots || !state.geometry.userData.rawPositions) return;
+  try {
+    const db = await openProjectDB();
+    const projId = state.projectId || (state.modelName + '_' + state.triCount);
+    state.projectId = projId;
+
+    const record = {
+      id: projId,
+      name: state.modelName,
+      triCount: state.triCount,
+      updatedAt: Date.now(),
+      slots: JSON.parse(JSON.stringify(state.slots)),
+      rawPositions: state.geometry.userData.rawPositions.buffer.slice(0),
+      triSlots: state.triSlots.buffer.slice(0),
+      fence: state.fence ? state.fence.buffer.slice(0) : null
+    };
+
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).put(record);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+
+    // Keep at most 12 most recent projects so phone storage stays tidy
+    const all = await getAllSavedProjects();
+    if (all.length > 12) {
+      const txDel = db.transaction(DB_STORE, 'readwrite');
+      const storeDel = txDel.objectStore(DB_STORE);
+      for (let i = 12; i < all.length; i++) {
+        storeDel.delete(all[i].id);
+      }
+    }
+
+    await refreshRecentProjectsUI();
+    if (!silent) {
+      showToast(`Saved WIP: ${state.modelName}`);
+    }
+  } catch (err) {
+    console.error('Failed to save WIP:', err);
+    if (!silent) showToast('Could not save WIP on this browser');
+  }
+}
+
+async function deleteProjectFromDB(id) {
+  try {
+    const db = await openProjectDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    await refreshRecentProjectsUI();
+    showToast('Removed saved project');
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadSavedProject(record) {
+  setLoading(true, 'Restoring ' + record.name + '...');
+  await new Promise((r) => setTimeout(r, 30));
+  try {
+    state.projectId = record.id;
+    state.modelName = record.name;
+    modelNameEl.textContent = record.name + ' (WIP)';
+
+    if (Array.isArray(record.slots) && record.slots.length === 4) {
+      state.slots = JSON.parse(JSON.stringify(record.slots));
+      renderSlots();
+    }
+
+    const posFloat = new Float32Array(record.rawPositions);
+    const savedSlots = new Uint8Array(record.triSlots);
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(posFloat, 3));
+
+    const savedFence = record.fence ? new Uint8Array(record.fence) : null;
+    setupMeshFromGeometry(geom, savedSlots, savedFence);
+    emptyState.classList.add('hidden');
+    leftNavRail.style.display = 'flex';
+    btnExport.disabled = false;
+    btnSaveWip.disabled = false;
+    projectsModal.classList.remove('open');
+    showToast(`Resumed ${record.name}`);
+  } catch (err) {
+    console.error(err);
+    alert('Could not open saved project: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function formatTimeAgo(ts) {
+  const diffSec = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+  if (diffSec < 60) return 'Just now';
+  const min = Math.floor(diffSec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const days = Math.floor(hr / 24);
+  return `${days}d ago`;
+}
+
+async function refreshRecentProjectsUI() {
+  const list = await getAllSavedProjects();
+  const containers = [
+    document.getElementById('hero-recent-list'),
+    document.getElementById('modal-recent-list')
+  ];
+
+  containers.forEach((container) => {
+    if (!container) return;
+    container.innerHTML = '';
+    if (!list.length) {
+      container.innerHTML = '<div class="recent-empty">No saved projects yet</div>';
+      return;
+    }
+
+    list.forEach((proj) => {
+      const item = document.createElement('div');
+      item.className = 'project-item';
+
+      const info = document.createElement('div');
+      info.className = 'project-info';
+
+      const dotsHtml = (proj.slots || [])
+        .map((s) => `<span class="mini-dot" style="background:${s.hex}"></span>`)
+        .join('');
+
+      info.innerHTML = `
+        <div class="project-name">${proj.name}</div>
+        <div class="project-meta">
+          <span class="mini-swatches">${dotsHtml}</span>
+          <span>${(proj.triCount || 0).toLocaleString()} tris</span>
+          <span>• ${formatTimeAgo(proj.updatedAt)}</span>
+        </div>
+      `;
+      info.addEventListener('click', () => loadSavedProject(proj));
+
+      const actions = document.createElement('div');
+      actions.className = 'project-actions';
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'proj-open-btn';
+      openBtn.type = 'button';
+      openBtn.textContent = 'Resume';
+      openBtn.addEventListener('click', () => loadSavedProject(proj));
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'proj-del-btn';
+      delBtn.type = 'button';
+      delBtn.textContent = '✕';
+      delBtn.title = 'Delete saved project';
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteProjectFromDB(proj.id);
+      });
+
+      actions.appendChild(openBtn);
+      actions.appendChild(delBtn);
+
+      item.appendChild(info);
+      item.appendChild(actions);
+      container.appendChild(item);
+    });
+  });
+}
+
+const btnProjects = document.getElementById('btn-projects');
+const btnSaveWip = document.getElementById('btn-save-wip');
+const projectsModal = document.getElementById('projects-modal');
+const btnCloseProjectsModal = document.getElementById('btn-close-projects-modal');
+
+btnProjects.addEventListener('click', async () => {
+  await refreshRecentProjectsUI();
+  projectsModal.classList.add('open');
+});
+
+btnCloseProjectsModal.addEventListener('click', () => {
+  projectsModal.classList.remove('open');
+});
+
+projectsModal.addEventListener('click', (e) => {
+  if (e.target === projectsModal) projectsModal.classList.remove('open');
+});
+
+btnSaveWip.addEventListener('click', () => {
+  saveCurrentProjectToDB(false);
+});
+
+// Populate recent projects list on startup
+refreshRecentProjectsUI();
+
+// ---------- Export Painted .3MF (Email / Share Sheet + Downloads) ----------
+const exportModal = document.getElementById('export-modal');
+const exportFileLabel = document.getElementById('export-file-label');
+const btnShareEmail = document.getElementById('btn-share-email');
+const btnSaveDownloads = document.getElementById('btn-save-downloads');
+const btnCloseExportModal = document.getElementById('btn-close-export-modal');
+
+let cachedExportBlob = null;
+let cachedExportFilename = '';
+
+async function buildPainted3mfBlob() {
+  const zip = new JSZip();
+
+  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
+  <Default Extension="config" ContentType="text/plain"/>
+</Types>`);
+
+  zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+</Relationships>`);
+
+  const rawPos = state.geometry.userData.rawPositions;
+  const vertMap = new Map();
+  const uniqueVerts = [];
+  const triVertIndices = new Int32Array(state.triCount * 3);
+  const invTol = 10000;
+
+  for (let i = 0; i < state.triCount * 3; i++) {
+    const x = rawPos[i * 3];
+    const y = rawPos[i * 3 + 1];
+    const z = rawPos[i * 3 + 2];
+    const key = `${Math.round(x * invTol)},${Math.round(y * invTol)},${Math.round(z * invTol)}`;
+    let idx = vertMap.get(key);
+    if (idx === undefined) {
+      idx = uniqueVerts.length / 3;
+      vertMap.set(key, idx);
+      uniqueVerts.push(x.toFixed(5), y.toFixed(5), z.toFixed(5));
+    }
+    triVertIndices[i] = idx;
+  }
+
+  const vertLines = [];
+  for (let i = 0; i < uniqueVerts.length; i += 3) {
+    vertLines.push(`        <vertex x="${uniqueVerts[i]}" y="${uniqueVerts[i + 1]}" z="${uniqueVerts[i + 2]}"/>`);
+  }
+
+  const triLines = [];
+  for (let t = 0; t < state.triCount; t++) {
+    const v1 = triVertIndices[t * 3];
+    const v2 = triVertIndices[t * 3 + 1];
+    const v3 = triVertIndices[t * 3 + 2];
+    const slot = state.triSlots[t] || 1;
+    const code = encodePaintColorCode(slot);
+    triLines.push(`        <triangle v1="${v1}" v2="${v2}" v3="${v3}" paint_color="${code}" slic3rpe:mmu_segmentation="${code}"/>`);
+  }
+
+  const c1 = state.slots[0].hex.toUpperCase();
+  const c2 = state.slots[1].hex.toUpperCase();
+  const c3 = state.slots[2].hex.toUpperCase();
+  const c4 = state.slots[3].hex.toUpperCase();
+
+  const modelXml = `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US"
+  xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
+  xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02"
+  xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06">
+  <metadata name="Application">JinxForge-ColoringBook-v1.12</metadata>
+  <resources>
+    <m:colorgroup id="1">
+      <m:color color="${c1}FF"/>
+      <m:color color="${c2}FF"/>
+      <m:color color="${c3}FF"/>
+      <m:color color="${c4}FF"/>
+    </m:colorgroup>
+    <object id="2" name="${state.modelName}" type="model">
+      <mesh>
+        <vertices>
+${vertLines.join('\n')}
+        </vertices>
+        <triangles>
+${triLines.join('\n')}
+        </triangles>
+      </mesh>
+    </object>
+  </resources>
+  <build>
+    <item objectid="2"/>
+  </build>
+</model>`;
+
+  zip.file('3D/3dmodel.model', modelXml);
+
+  const projectSettings = {
+    filament_colour: [c1, c2, c3, c4],
+    filament_type: ['PETG', 'PETG', 'PETG', 'PETG']
+  };
+  zip.file('Metadata/project_settings.config', JSON.stringify(projectSettings, null, 2));
+
+  return await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+}
+
+function triggerDownloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+btnExport.addEventListener('click', async () => {
+  if (!state.geometry || !state.triSlots) return;
+  setLoading(true, 'Preparing .3MF file...');
+  await new Promise((r) => setTimeout(r, 30));
+
+  try {
+    cachedExportFilename = `${state.modelName}_painted.3mf`;
+    cachedExportBlob = await buildPainted3mfBlob();
+    const kb = Math.max(1, Math.round(cachedExportBlob.size / 1024));
+    exportFileLabel.textContent = `${cachedExportFilename} (${kb.toLocaleString()} KB) • Slots: ${state.slots.map(s => s.hex.toUpperCase()).join(', ')}`;
+    // Jinx wiring (2026-11-26, Richard's order): Export routes straight to email delivery — no modal stop.
+    await deliverExportByEmail();
+  } catch (err) {
+    console.error(err);
+    alert('Export failed: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+async function deliverExportByEmail() {
+  if (!cachedExportBlob) return;
+  exportModal.classList.remove('open');
+
+  const slotSummary = state.slots
+    .map((s) => `Slot ${s.id}: ${s.hex.toUpperCase()}`)
+    .join('\n');
+  const emailSubject = `JinxForge Painted 3MF: ${cachedExportFilename}`;
+  const emailBody = `Painted 3MF attached: ${cachedExportFilename}\n\nFilament Slot Map:\n${slotSummary}`;
+
+  // Use Web Share API with File attachment (works on Android Chrome over HTTPS or share-enabled context)
+  try {
+    // Use application/zip MIME type because Android Chrome Web Share allows .zip/archive attachments reliably
+    const shareFile = new File([cachedExportBlob], cachedExportFilename, {
+      type: 'application/zip'
+    });
+
+    if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [shareFile] }))) {
+      await navigator.share({
+        title: emailSubject,
+        text: emailBody,
+        files: [shareFile]
+      });
+      showToast('Shared via Android Share Sheet');
+      return;
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return; // User closed share sheet
+    console.warn('Web Share file fallback:', err);
+  }
+
+  // Fallback when opened from local file:// storage (where Chrome blocks Web Share):
+  // Save the .3MF into Downloads first, then launch Gmail compose pre-addressed to rnp66640@gmail.com
+  triggerDownloadBlob(cachedExportBlob, cachedExportFilename);
+  showToast(`Saved ${cachedExportFilename} to Downloads — attach in Gmail`);
+  setTimeout(() => {
+    const mailtoUrl = `mailto:rnp66640@gmail.com?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody + '\n\n(Attach ' + cachedExportFilename + ' from your Downloads folder)')}`;
+    window.location.href = mailtoUrl;
+  }, 450);
+}
+
+btnShareEmail.addEventListener('click', deliverExportByEmail);
+
+btnSaveDownloads.addEventListener('click', () => {
+  if (!cachedExportBlob) return;
+  exportModal.classList.remove('open');
+  triggerDownloadBlob(cachedExportBlob, cachedExportFilename);
+  showToast(`Saved to Downloads: ${cachedExportFilename}`);
+});
+
+btnCloseExportModal.addEventListener('click', () => {
+  exportModal.classList.remove('open');
+});
+
+exportModal.addEventListener('click', (e) => {
+  if (e.target === exportModal) exportModal.classList.remove('open');
+});
+</script>
+</body>
+</html>
